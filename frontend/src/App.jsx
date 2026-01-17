@@ -975,12 +975,6 @@ function App() {
   const activePlayerState = activePlayer === 1 ? player1State : player2State;
   const nextVideo = activePlayer === 1 ? player2Video : player1Video;
 
-  // Calculate what's actually "next" in the auto-play queue
-  const autoPlayNextIndex = autoPlayIndex + (activePlayer === 1 ? 1 : 2);
-  const autoPlayNextVideo = autoPlayEnabled && autoPlayNextIndex < autoPlayVideos.length
-    ? autoPlayVideos[autoPlayNextIndex]
-    : nextVideo;
-
   return (
     <div className="min-h-screen">
       {/* User Selection Modal */}
@@ -1798,24 +1792,24 @@ function App() {
                       </div>
 
                       {/* Next Up */}
-                      {autoPlayNextVideo ? (
+                      {nextVideo ? (
                         <div className="flex items-center gap-2 pt-2 border-t border-white/10">
                           <span className="text-purple-300/50 text-xs">Next:</span>
                           <div className="w-8 h-5 rounded overflow-hidden bg-black/50 flex-shrink-0">
                             <img
-                              src={autoPlayNextVideo.thumbnail_url}
-                              alt={autoPlayNextVideo.title}
+                              src={nextVideo.thumbnail_url}
+                              alt={nextVideo.title}
                               className="w-full h-full object-cover opacity-60"
                             />
                           </div>
-                          <p className="text-purple-300/70 text-xs truncate flex-1">{autoPlayNextVideo.title}</p>
+                          <p className="text-purple-300/70 text-xs truncate flex-1">{nextVideo.title}</p>
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${activePlayer === 1 ? 'bg-pink-500/20 text-pink-300/70' : 'bg-purple-500/20 text-purple-300/70'}`}>
                             P{activePlayer === 1 ? 2 : 1}
                           </span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 pt-2 border-t border-white/10">
-                          <span className="text-purple-300/40 text-xs">End of playlist</span>
+                          <span className="text-purple-300/40 text-xs">No next video loaded</span>
                         </div>
                       )}
                     </>
