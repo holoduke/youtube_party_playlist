@@ -807,7 +807,7 @@ function App() {
   // Enable auto-play - start from the beginning
   const enableAutoPlay = useCallback(() => {
     if (autoPlayVideos.length === 0) {
-      showNotification('Select a playlist first', 'error');
+      showNotification('No videos in playlist', 'error');
       return;
     }
 
@@ -1655,9 +1655,7 @@ function App() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <span className="text-sm font-medium">
-                        {autoPlayVideos.length > 0
-                          ? `Auto Play (${autoPlayVideos.length} songs)`
-                          : 'Select a playlist first'}
+                        Auto Play{autoPlayVideos.length > 0 ? ` (${autoPlayVideos.length})` : ''}
                       </span>
                     </button>
                   ) : (
