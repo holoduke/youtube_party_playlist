@@ -10,7 +10,7 @@ export default function UserSelector() {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-gradient-to-br from-purple-900 via-indigo-900 to-pink-900">
+      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-gradient-to-br from-purple-950 via-indigo-950 to-pink-950">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
       </div>
     );
@@ -35,8 +35,8 @@ export default function UserSelector() {
   };
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-gradient-to-br from-purple-900 via-indigo-900 to-pink-900">
-      <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full mx-4 border border-white/20 shadow-2xl">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-gradient-to-br from-purple-950 via-indigo-950 to-pink-950">
+      <div className="bg-black/40 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full mx-4 border border-purple-500/20 shadow-2xl">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 via-pink-500 to-purple-600 bg-clip-text text-transparent mb-2">
             BARMANIA
