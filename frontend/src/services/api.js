@@ -9,6 +9,13 @@ const api = axios.create({
   },
 });
 
+// ==================== Auth API ====================
+
+export const login = async (username, password) => {
+  const response = await api.post('/login', { username, password });
+  return response.data;
+};
+
 // ==================== User API ====================
 
 export const getUsers = async () => {

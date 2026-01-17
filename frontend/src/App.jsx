@@ -2109,20 +2109,26 @@ function App() {
                     handlePlayVideo(addVideoModal, 1);
                     setAddVideoModal(null);
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors font-medium"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors font-medium relative"
                 >
                   <div className="w-6 h-6 bg-white/20 rounded flex items-center justify-center text-xs font-bold">1</div>
                   <span>Player 1</span>
+                  {player1State.playing && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Playing"></span>
+                  )}
                 </button>
                 <button
                   onClick={() => {
                     handlePlayVideo(addVideoModal, 2);
                     setAddVideoModal(null);
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-pink-600 hover:bg-pink-500 text-white rounded-xl transition-colors font-medium"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-pink-600 hover:bg-pink-500 text-white rounded-xl transition-colors font-medium relative"
                 >
                   <div className="w-6 h-6 bg-white/20 rounded flex items-center justify-center text-xs font-bold">2</div>
                   <span>Player 2</span>
+                  {player2State.playing && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Playing"></span>
+                  )}
                 </button>
               </div>
 

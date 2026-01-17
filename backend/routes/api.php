@@ -8,7 +8,10 @@ use App\Http\Controllers\Api\VideoController;
 use App\Http\Controllers\Api\YouTubeController;
 use Illuminate\Support\Facades\Route;
 
-// Users (simple selection - no auth)
+// Authentication
+Route::post('/login', [UserController::class, 'login']);
+
+// Users
 Route::get('/users', [UserController::class, 'index']);
 Route::get('/users/{user}', [UserController::class, 'show']);
 

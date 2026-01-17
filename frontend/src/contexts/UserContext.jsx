@@ -1,46 +1,40 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { getUsers } from '../services/api';
+import { login as apiLogin } from '../services/api';
 
 const UserContext = createContext(null);
 
 export function UserProvider({ children }) {
-  const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadUsers = async () => {
+    // Check localStorage for saved user session
+    const savedUser = localStorage.getItem('barmania_user');
+    if (savedUser) {
       try {
-        const data = await getUsers();
-        setUsers(data);
-
-        // Check localStorage for saved user
-        const savedUserId = localStorage.getItem('barmania_user_id');
-        if (savedUserId) {
-          const user = data.find(u => u.id === parseInt(savedUserId));
-          if (user) setCurrentUser(user);
-        }
-      } catch (error) {
-        console.error('Failed to load users:', error);
+        setCurrentUser(JSON.parse(savedUser));
+      } catch (e) {
+        localStorage.removeItem('barmania_user');
       }
-      setLoading(false);
-    };
-
-    loadUsers();
+    }
+    setLoading(false);
   }, []);
 
-  const selectUser = (user) => {
+  const login = async (username, password) => {
+    const response = await apiLogin(username, password);
+    const user = response.user;
     setCurrentUser(user);
-    localStorage.setItem('barmania_user_id', user.id.toString());
+    localStorage.setItem('barmania_user', JSON.stringify(user));
+    return user;
   };
 
   const logout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('barmania_user_id');
+    localStorage.removeItem('barmania_user');
   };
 
   return (
-    <UserContext.Provider value={{ users, currentUser, selectUser, logout, loading }}>
+    <UserContext.Provider value={{ currentUser, login, logout, loading }}>
       {children}
     </UserContext.Provider>
   );
