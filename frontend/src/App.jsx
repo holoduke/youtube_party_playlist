@@ -58,8 +58,9 @@ function App() {
   const [youtubeSearchQuery, setYoutubeSearchQuery] = useState('');
   const [youtubeSearchResults, setYoutubeSearchResults] = useState([]);
   const [youtubeSearchLoading, setYoutubeSearchLoading] = useState(false);
-  const [showYoutubeResults, setShowYoutubeResults] = useState(false);
+  const [showYoutubeDropdown, setShowYoutubeDropdown] = useState(false);
   const [importingVideoId, setImportingVideoId] = useState(null);
+  const youtubeSearchTimeoutRef = useRef(null);
 
   // Get the remote URL for QR code
   const getRemoteUrl = () => {
@@ -162,28 +163,44 @@ function App() {
     setPlaylistDropZoneActive(false);
   };
 
-  // YouTube search handler
-  const handleYoutubeSearch = async (e) => {
-    e.preventDefault();
-    if (!youtubeSearchQuery.trim()) return;
+  // YouTube search handler with debounce
+  const handleYoutubeSearchInput = (value) => {
+    setYoutubeSearchQuery(value);
 
-    setYoutubeSearchLoading(true);
-    setShowYoutubeResults(true);
-    try {
-      const results = await searchYouTube(youtubeSearchQuery);
-      setYoutubeSearchResults(results);
-    } catch (error) {
-      console.error('YouTube search failed:', error);
-      showNotification('Search failed', 'error');
+    // Clear previous timeout
+    if (youtubeSearchTimeoutRef.current) {
+      clearTimeout(youtubeSearchTimeoutRef.current);
     }
-    setYoutubeSearchLoading(false);
+
+    if (!value.trim()) {
+      setYoutubeSearchResults([]);
+      setShowYoutubeDropdown(false);
+      setYoutubeSearchLoading(false);
+      return;
+    }
+
+    // Debounce search - wait 300ms after typing stops
+    setYoutubeSearchLoading(true);
+    setShowYoutubeDropdown(true);
+    youtubeSearchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await searchYouTube(value);
+        setYoutubeSearchResults(results);
+      } catch (error) {
+        console.error('YouTube search failed:', error);
+      }
+      setYoutubeSearchLoading(false);
+    }, 300);
   };
 
   // Clear YouTube search
   const clearYoutubeSearch = () => {
     setYoutubeSearchQuery('');
     setYoutubeSearchResults([]);
-    setShowYoutubeResults(false);
+    setShowYoutubeDropdown(false);
+    if (youtubeSearchTimeoutRef.current) {
+      clearTimeout(youtubeSearchTimeoutRef.current);
+    }
   };
 
   // Play a YouTube search result (imports first if needed)
@@ -201,7 +218,9 @@ function App() {
       // Stop playlist mode when manually selecting
       setPlaylistMode(false);
       setActivePlaylist(null);
-      showNotification(`Playing on Player ${playerNumber}`);
+      // Close the dropdown and clear search
+      clearYoutubeSearch();
+      showNotification(`Playing "${video.title}" on Player ${playerNumber}`);
     } catch (error) {
       console.error('Failed to import video:', error);
       showNotification('Failed to play video', 'error');
@@ -789,7 +808,7 @@ function App() {
             <div className="lg:sticky lg:top-20 flex flex-col gap-3">
               {/* Playlist Selector */}
               <div
-                className={`p-3 bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${
+                className={`relative z-50 p-3 bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${
                   playlistDropZoneActive
                     ? 'border-green-500 bg-green-500/20 ring-2 ring-green-500 ring-dashed'
                     : 'border-white/10'
@@ -803,6 +822,12 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
                   </svg>
                   <span className="text-white text-sm font-medium">Playlist</span>
+                  {playlistMode && activePlaylist && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full text-xs">
+                      <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+                      Playing
+                    </span>
+                  )}
                   <span className="text-purple-300/40 text-xs ml-auto">Drop to add</span>
                 </div>
                 <div className="flex gap-2">
@@ -829,7 +854,7 @@ function App() {
 
                     {/* Dropdown */}
                     {headerPlaylistDropdownOpen && (
-                      <div className="absolute left-0 z-50 w-full mt-1 bg-gray-900/95 border border-purple-500/30 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      <div className="absolute left-0 z-[60] w-full mt-1 bg-gray-900/98 backdrop-blur-xl border border-purple-500/30 rounded-lg shadow-2xl max-h-48 overflow-y-auto">
                         {filteredHeaderPlaylists.length > 0 ? (
                           filteredHeaderPlaylists.map((playlist) => (
                             <button
@@ -861,21 +886,52 @@ function App() {
                     )}
                   </div>
 
-                  {/* View Playlist Button */}
-                  {selectedPlaylist && viewMode !== 'playlist' && (
-                    <button
-                      onClick={() => {
-                        setViewMode('playlist');
-                        setViewingPlaylist(selectedPlaylist);
-                      }}
-                      className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
-                      title="View playlist"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    </button>
+                  {/* Playlist Controls */}
+                  {selectedPlaylist && (
+                    <div className="flex gap-1">
+                      {/* Play/Stop Button */}
+                      {playlistMode && activePlaylist?.id === selectedPlaylist.id ? (
+                        <button
+                          onClick={stopPlaylist}
+                          className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
+                          title="Stop playlist"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => selectedPlaylist && handlePlayPlaylist(selectedPlaylist)}
+                          disabled={!selectedPlaylist.videos || selectedPlaylist.videos.length === 0}
+                          className="px-3 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                          title="Play playlist"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                      )}
+
+                      {/* View Button */}
+                      {viewMode !== 'playlist' && (
+                        <button
+                          onClick={() => {
+                            setViewMode('playlist');
+                            setViewingPlaylist(selectedPlaylist);
+                          }}
+                          className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
+                          title="View playlist"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -920,74 +976,123 @@ function App() {
           {/* Right Column - Video List */}
           <div className="lg:col-span-8">
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden">
-              {/* YouTube Search */}
-              <div className="p-3 border-b border-white/10 bg-gradient-to-r from-red-600/10 to-pink-600/10">
-                <form onSubmit={handleYoutubeSearch} className="flex gap-2">
-                  <div className="relative flex-1">
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                    </svg>
-                    <input
-                      type="text"
-                      value={youtubeSearchQuery}
-                      onChange={(e) => setYoutubeSearchQuery(e.target.value)}
-                      placeholder="Search YouTube..."
-                      className="w-full pl-10 pr-10 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-red-300/50 focus:outline-none focus:border-red-500 text-sm"
-                    />
-                    {youtubeSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={clearYoutubeSearch}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={youtubeSearchLoading}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-600/50 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
-                  >
-                    {youtubeSearchLoading ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
+              {/* YouTube Search with Autocomplete Dropdown */}
+              <div className="relative p-3 border-b border-white/10 bg-gradient-to-r from-red-600/10 to-pink-600/10">
+                <div className="relative">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400 z-10" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                  </svg>
+                  <input
+                    type="text"
+                    value={youtubeSearchQuery}
+                    onChange={(e) => handleYoutubeSearchInput(e.target.value)}
+                    onFocus={() => youtubeSearchResults.length > 0 && setShowYoutubeDropdown(true)}
+                    placeholder="Search YouTube..."
+                    className="w-full pl-10 pr-10 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-red-300/50 focus:outline-none focus:border-red-500 text-sm"
+                  />
+                  {youtubeSearchLoading && (
+                    <div className="absolute right-10 top-1/2 -translate-y-1/2">
+                      <div className="w-4 h-4 border-2 border-red-300/30 border-t-red-400 rounded-full animate-spin" />
+                    </div>
+                  )}
+                  {youtubeSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={clearYoutubeSearch}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white z-10"
+                    >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
-                    )}
-                    <span className="hidden sm:inline">Search</span>
-                  </button>
-                </form>
+                    </button>
+                  )}
+
+                  {/* Autocomplete Dropdown */}
+                  {showYoutubeDropdown && youtubeSearchQuery && (
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-gray-900/98 backdrop-blur-xl border border-red-500/30 rounded-xl shadow-2xl shadow-black/50 max-h-[400px] overflow-y-auto z-50">
+                      {youtubeSearchLoading && youtubeSearchResults.length === 0 ? (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="w-6 h-6 border-2 border-red-300/30 border-t-red-400 rounded-full animate-spin" />
+                          <span className="ml-3 text-red-300/60 text-sm">Searching YouTube...</span>
+                        </div>
+                      ) : youtubeSearchResults.length === 0 ? (
+                        <div className="text-center text-red-300/60 py-8 text-sm">
+                          No results found
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-white/5">
+                          {youtubeSearchResults.map((video) => (
+                            <div
+                              key={video.youtube_id}
+                              className="flex items-center gap-3 p-3 hover:bg-white/5 transition-colors group"
+                            >
+                              {/* Thumbnail */}
+                              <div className="relative flex-shrink-0 w-24 h-14 rounded-lg overflow-hidden bg-black/50">
+                                <img
+                                  src={video.thumbnail_url}
+                                  alt={video.title}
+                                  className="w-full h-full object-cover"
+                                />
+                                {importingVideoId === video.youtube_id && (
+                                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                  </div>
+                                )}
+                                {/* YouTube badge */}
+                                <div className="absolute bottom-1 left-1 px-1 py-0.5 bg-red-600 rounded text-[10px] text-white font-medium">
+                                  YT
+                                </div>
+                              </div>
+
+                              {/* Title */}
+                              <div className="flex-1 min-w-0">
+                                <h4 className="text-white text-sm font-medium line-clamp-2">{video.title}</h4>
+                              </div>
+
+                              {/* Play buttons */}
+                              <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => handlePlayYoutubeResult(video, 1)}
+                                  disabled={importingVideoId === video.youtube_id}
+                                  className="flex items-center gap-1 px-2 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 text-white rounded-lg transition-colors text-xs font-medium"
+                                  title="Play on Player 1"
+                                >
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                  </svg>
+                                  P1
+                                </button>
+                                <button
+                                  onClick={() => handlePlayYoutubeResult(video, 2)}
+                                  disabled={importingVideoId === video.youtube_id}
+                                  className="flex items-center gap-1 px-2 py-1.5 bg-pink-600 hover:bg-pink-500 disabled:bg-pink-600/50 text-white rounded-lg transition-colors text-xs font-medium"
+                                  title="Play on Player 2"
+                                >
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                  </svg>
+                                  P2
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Click outside to close dropdown */}
+                {showYoutubeDropdown && (
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowYoutubeDropdown(false)}
+                  />
+                )}
               </div>
 
-              {/* YouTube Search Results or Playlist View Header or Category Filter */}
-              {showYoutubeResults ? (
-                <div className="border-b border-white/10 p-3 flex items-center justify-between bg-gradient-to-r from-red-600/10 to-pink-600/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-red-500 to-pink-500 rounded-lg flex items-center justify-center">
-                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <h2 className="text-white font-semibold text-sm">YouTube Results</h2>
-                      <p className="text-red-300/60 text-xs">{youtubeSearchResults.length} videos found</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={clearYoutubeSearch}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span className="hidden sm:inline">Clear</span>
-                  </button>
-                </div>
-              ) : viewMode === 'playlist' && viewingPlaylist ? (
+              {/* Playlist View Header or Category Filter */}
+              {viewMode === 'playlist' && viewingPlaylist ? (
                 <div className="border-b border-white/10 p-3 flex items-center justify-between bg-gradient-to-r from-purple-600/10 to-pink-600/10">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
@@ -1024,77 +1129,6 @@ function App() {
               {loading && viewMode === 'categories' ? (
                 <div className="flex items-center justify-center h-64">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
-                </div>
-              ) : showYoutubeResults ? (
-                /* YouTube Search Results Grid */
-                <div className="p-4">
-                  {youtubeSearchLoading ? (
-                    <div className="flex items-center justify-center h-48">
-                      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-500"></div>
-                    </div>
-                  ) : youtubeSearchResults.length === 0 ? (
-                    <div className="text-center text-purple-300/60 py-12">
-                      No results found. Try a different search.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {youtubeSearchResults.map((video) => (
-                        <div
-                          key={video.youtube_id}
-                          className="group bg-white/5 rounded-xl overflow-hidden border border-white/10 hover:border-red-500/50 transition-all"
-                        >
-                          {/* Thumbnail */}
-                          <div className="relative aspect-video">
-                            <img
-                              src={video.thumbnail_url}
-                              alt={video.title}
-                              className="w-full h-full object-cover"
-                            />
-                            {/* YouTube Badge */}
-                            <div className="absolute top-2 left-2 px-2 py-0.5 bg-red-600 rounded text-xs text-white font-medium flex items-center gap-1">
-                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                              </svg>
-                              YouTube
-                            </div>
-                            {/* Loading overlay */}
-                            {importingVideoId === video.youtube_id && (
-                              <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white"></div>
-                              </div>
-                            )}
-                            {/* Player buttons overlay */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center p-3 gap-2">
-                              <button
-                                onClick={() => handlePlayYoutubeResult(video, 1)}
-                                disabled={importingVideoId === video.youtube_id}
-                                className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 text-white rounded-lg transition-colors text-sm font-medium"
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                </svg>
-                                P1
-                              </button>
-                              <button
-                                onClick={() => handlePlayYoutubeResult(video, 2)}
-                                disabled={importingVideoId === video.youtube_id}
-                                className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-pink-600 hover:bg-pink-500 disabled:bg-pink-600/50 text-white rounded-lg transition-colors text-sm font-medium"
-                              >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                </svg>
-                                P2
-                              </button>
-                            </div>
-                          </div>
-                          {/* Title */}
-                          <div className="p-3">
-                            <h3 className="text-white text-sm font-medium line-clamp-2">{video.title}</h3>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               ) : (
                 <VideoList
