@@ -602,11 +602,115 @@ function App() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Auto-play track index (tracks which song in the playlist we're on)
+  const [autoPlayIndex, setAutoPlayIndex] = useState(0);
+  const [isAutoFading, setIsAutoFading] = useState(false);
+  const autoFadeIntervalRef = useRef(null);
+
+  // Get the auto-play video list (from selected playlist or viewing playlist)
+  const autoPlayVideos = selectedPlaylist?.videos || viewingPlaylist?.videos || [];
+
+  // Enable auto-play - start from the beginning
+  const enableAutoPlay = useCallback(() => {
+    if (autoPlayVideos.length === 0) {
+      showNotification('Select a playlist first', 'error');
+      return;
+    }
+
+    // Stop current playback
+    if (player1Ref.current) player1Ref.current.pause();
+    if (player2Ref.current) player2Ref.current.pause();
+
+    // Reset state
+    setAutoPlayIndex(0);
+    setCrossfadeValue(0); // Start with P1 active
+
+    // Load first two videos
+    setPlayer1Video(autoPlayVideos[0]);
+    if (autoPlayVideos.length > 1) {
+      setPlayer2Video(autoPlayVideos[1]);
+    } else {
+      setPlayer2Video(null);
+    }
+
+    // Enable auto play
+    setAutoPlayEnabled(true);
+
+    showNotification(`Auto Play started: ${autoPlayVideos.length} songs`);
+  }, [autoPlayVideos, showNotification]);
+
+  // Disable auto-play
+  const disableAutoPlay = useCallback(() => {
+    setAutoPlayEnabled(false);
+    setIsAutoFading(false);
+    if (autoFadeIntervalRef.current) {
+      clearInterval(autoFadeIntervalRef.current);
+      autoFadeIntervalRef.current = null;
+    }
+  }, []);
+
+  // Auto-crossfade effect - watch for songs nearing end
+  useEffect(() => {
+    if (!autoPlayEnabled || isAutoFading) return;
+
+    const activeState = crossfadeValue < 50 ? player1State : player2State;
+    const remainingTime = activeState.duration - activeState.currentTime;
+
+    // Start crossfade when 10 seconds remaining (and song is at least 20 seconds long)
+    if (activeState.duration > 20 && remainingTime <= 10 && remainingTime > 0) {
+      setIsAutoFading(true);
+
+      // Calculate crossfade step (fade over ~8 seconds)
+      const fadeStep = crossfadeValue < 50 ? 6.25 : -6.25; // 100/16 steps
+      let currentFade = crossfadeValue;
+
+      autoFadeIntervalRef.current = setInterval(() => {
+        currentFade += fadeStep;
+
+        if ((fadeStep > 0 && currentFade >= 100) || (fadeStep < 0 && currentFade <= 0)) {
+          // Fade complete
+          currentFade = fadeStep > 0 ? 100 : 0;
+          setCrossfadeValue(currentFade);
+          clearInterval(autoFadeIntervalRef.current);
+          autoFadeIntervalRef.current = null;
+          setIsAutoFading(false);
+
+          // Load next song on the player that just finished
+          const finishedPlayer = fadeStep > 0 ? 1 : 2;
+          const nextIndex = autoPlayIndex + 2;
+
+          if (nextIndex < autoPlayVideos.length) {
+            if (finishedPlayer === 1) {
+              setPlayer1Video(autoPlayVideos[nextIndex]);
+            } else {
+              setPlayer2Video(autoPlayVideos[nextIndex]);
+            }
+            setAutoPlayIndex(prev => prev + 1);
+          }
+        } else {
+          setCrossfadeValue(currentFade);
+        }
+      }, 500); // Update every 500ms
+    }
+
+    return () => {
+      if (autoFadeIntervalRef.current) {
+        clearInterval(autoFadeIntervalRef.current);
+      }
+    };
+  }, [autoPlayEnabled, isAutoFading, crossfadeValue, player1State, player2State, autoPlayIndex, autoPlayVideos]);
+
   // Get the "active" player based on crossfade
   const activePlayer = crossfadeValue < 50 ? 1 : 2;
   const activeVideo = activePlayer === 1 ? player1Video : player2Video;
   const activePlayerState = activePlayer === 1 ? player1State : player2State;
   const nextVideo = activePlayer === 1 ? player2Video : player1Video;
+
+  // Calculate what's actually "next" in the auto-play queue
+  const autoPlayNextIndex = autoPlayIndex + (activePlayer === 1 ? 1 : 2);
+  const autoPlayNextVideo = autoPlayEnabled && autoPlayNextIndex < autoPlayVideos.length
+    ? autoPlayVideos[autoPlayNextIndex]
+    : nextVideo;
 
   return (
     <div className="min-h-screen">
@@ -1019,30 +1123,46 @@ function App() {
               <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} p-3`}>
                 {!autoPlayEnabled ? (
                   /* Auto Play Disabled - Simple Toggle */
-                  <button
-                    onClick={() => setAutoPlayEnabled(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 text-purple-300 hover:text-white rounded-lg transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className="text-sm font-medium">Enable Auto Play</span>
-                  </button>
+                  <div>
+                    <button
+                      onClick={enableAutoPlay}
+                      disabled={autoPlayVideos.length === 0}
+                      className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg transition-colors ${
+                        autoPlayVideos.length > 0
+                          ? 'bg-white/5 hover:bg-white/10 text-purple-300 hover:text-white'
+                          : 'bg-white/5 text-purple-300/30 cursor-not-allowed'
+                      }`}
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-sm font-medium">
+                        {autoPlayVideos.length > 0
+                          ? `Auto Play (${autoPlayVideos.length} songs)`
+                          : 'Select a playlist first'}
+                      </span>
+                    </button>
+                  </div>
                 ) : (
                   /* Auto Play Enabled - Full Controls */
                   <>
                     {/* Header with disable button */}
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                        <span className="text-green-400 text-xs font-medium">Auto Play Active</span>
+                        <span className={`w-2 h-2 rounded-full ${isAutoFading ? 'bg-yellow-400' : 'bg-green-400'} animate-pulse`}></span>
+                        <span className={`text-xs font-medium ${isAutoFading ? 'text-yellow-400' : 'text-green-400'}`}>
+                          {isAutoFading ? 'Crossfading...' : 'Auto Play Active'}
+                        </span>
+                        <span className="text-purple-300/40 text-xs">
+                          {autoPlayIndex + 1}/{autoPlayVideos.length}
+                        </span>
                       </div>
                       <button
-                        onClick={() => setAutoPlayEnabled(false)}
+                        onClick={disableAutoPlay}
                         className="text-purple-300/50 hover:text-white text-xs transition-colors"
                       >
-                        Disable
+                        Stop
                       </button>
                     </div>
 
@@ -1136,20 +1256,24 @@ function App() {
                     </div>
 
                     {/* Next Up */}
-                    {nextVideo && (
+                    {autoPlayNextVideo ? (
                       <div className="flex items-center gap-2 pt-2 border-t border-white/10">
                         <span className="text-purple-300/50 text-xs">Next:</span>
                         <div className="w-8 h-5 rounded overflow-hidden bg-black/50 flex-shrink-0">
                           <img
-                            src={nextVideo.thumbnail_url}
-                            alt={nextVideo.title}
+                            src={autoPlayNextVideo.thumbnail_url}
+                            alt={autoPlayNextVideo.title}
                             className="w-full h-full object-cover opacity-60"
                           />
                         </div>
-                        <p className="text-purple-300/70 text-xs truncate flex-1">{nextVideo.title}</p>
+                        <p className="text-purple-300/70 text-xs truncate flex-1">{autoPlayNextVideo.title}</p>
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${activePlayer === 1 ? 'bg-pink-500/20 text-pink-300/70' : 'bg-purple-500/20 text-purple-300/70'}`}>
                           P{activePlayer === 1 ? 2 : 1}
                         </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 pt-2 border-t border-white/10">
+                        <span className="text-purple-300/40 text-xs">End of playlist</span>
                       </div>
                     )}
                   </>
