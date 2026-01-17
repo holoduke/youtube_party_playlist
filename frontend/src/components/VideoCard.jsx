@@ -37,9 +37,10 @@ export default function VideoCard({ video, onShowAddModal }) {
           <img
             src={thumbnailUrl}
             alt={video.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 pointer-events-none"
             onError={() => !imgError && setImgError(true)}
             loading="lazy"
+            draggable="false"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/50 to-pink-900/50">

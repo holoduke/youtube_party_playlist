@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { useNavigate } from 'react-router-dom';
-import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, createPlaylist, updatePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId } from './services/api';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, createPlaylist, updatePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId } from './services/api';
 import { initEcho, broadcastState } from './services/playerSync';
 import { useUser } from './contexts/UserContext';
 import CategoryFilter from './components/CategoryFilter';
 import VideoList from './components/VideoList';
+import PlaylistVideoList from './components/PlaylistVideoList';
 import VideoPlayer from './components/VideoPlayer';
 import Crossfader from './components/Crossfader';
 import UserSelector from './components/UserSelector';
 
 function App() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser, logout } = useUser();
   const [categories, setCategories] = useState([]);
   const [videos, setVideos] = useState([]);
@@ -32,8 +34,20 @@ function App() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [playlistContentCollapsed, setPlaylistContentCollapsed] = useState(false);
 
-  // View mode: 'categories' or 'playlist'
-  const [viewMode, setViewMode] = useState('categories');
+  // View mode: 'categories' or 'playlist' (synced with URL param 'view')
+  const urlViewMode = searchParams.get('view');
+  const viewMode = urlViewMode === 'playlist' ? 'playlist' : 'categories';
+  const setViewMode = (mode) => {
+    setSearchParams(prev => {
+      const newParams = new URLSearchParams(prev);
+      if (mode === 'playlist') {
+        newParams.set('view', 'playlist');
+      } else {
+        newParams.set('view', 'library');
+      }
+      return newParams;
+    }, { replace: true });
+  };
   const [viewingPlaylist, setViewingPlaylist] = useState(null);
 
   // Remote sync state
@@ -86,6 +100,27 @@ function App() {
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
   // Track which videos were restored (should not auto-start)
   const [restoredVideoIds, setRestoredVideoIds] = useState({ player1: null, player2: null });
+  // Track drag over playlist tab for adding videos
+  const [isPlaylistTabDragOver, setIsPlaylistTabDragOver] = useState(false);
+  // Track global drag state for video player overlays
+  const [isGlobalDragging, setIsGlobalDragging] = useState(false);
+
+  // Listen for drag start/end to show drop overlays on video players
+  useEffect(() => {
+    const handleDragStart = () => setIsGlobalDragging(true);
+    const handleDragEnd = () => setIsGlobalDragging(false);
+    const handleDrop = () => setTimeout(() => setIsGlobalDragging(false), 50);
+
+    document.addEventListener('dragstart', handleDragStart);
+    document.addEventListener('dragend', handleDragEnd);
+    document.addEventListener('drop', handleDrop);
+
+    return () => {
+      document.removeEventListener('dragstart', handleDragStart);
+      document.removeEventListener('dragend', handleDragEnd);
+      document.removeEventListener('drop', handleDrop);
+    };
+  }, []);
 
   // Get the remote URL for QR code
   const getRemoteUrl = () => {
@@ -346,8 +381,8 @@ function App() {
       setNewPlaylistPublic(false);
       setShowPlaylistModal(false);
       loadPlaylists();
-      // Select the newly created playlist
-      handleSelectPlaylist(playlist.id);
+      // Select the newly created playlist and switch to playlist view
+      handleSelectPlaylist(playlist.id, true);
     } catch (error) {
       console.error('Failed to create playlist:', error);
       showNotification('Failed to create playlist', 'error');
@@ -429,22 +464,26 @@ function App() {
 
   // Select a playlist from the modal
   const handleSelectPlaylistFromModal = async (playlistId) => {
-    await handleSelectPlaylist(playlistId);
+    await handleSelectPlaylist(playlistId, true);
     setShowPlaylistModal(false);
   };
 
   const handlePlayVideo = (video, playerNumber) => {
+    // Cancel any pending auto-load to prevent rapid video changes
+    if (loadNextVideoTimeoutRef.current) {
+      clearTimeout(loadNextVideoTimeoutRef.current);
+      loadNextVideoTimeoutRef.current = null;
+    }
+
     // Stop playlist mode when manually selecting a video
     setPlaylistMode(false);
     setActivePlaylist(null);
 
-    // Clear restored video ID so manual selections auto-start
+    // Just update the video state - VideoPlayer handles loading via YouTube API internally
     if (playerNumber === 1) {
       setPlayer1Video(video);
-      setRestoredVideoIds(prev => ({ ...prev, player1: null }));
     } else {
       setPlayer2Video(video);
-      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
     }
   };
 
@@ -489,13 +528,85 @@ function App() {
       showNotification(`Added to "${playlist?.name}"`);
       // Refresh playlists and selected playlist content
       loadPlaylists();
+      const updated = await getPlaylist(playlistId);
       if (selectedPlaylist?.id === playlistId) {
-        const updated = await getPlaylist(playlistId);
         setSelectedPlaylist(updated);
+      }
+      if (viewingPlaylist?.id === playlistId) {
+        setViewingPlaylist(updated);
       }
     } catch (error) {
       console.error('Failed to add video to playlist:', error);
       showNotification('Failed to add video', 'error');
+    }
+  };
+
+  const handleRemoveFromPlaylist = async (videoId, playlistId) => {
+    try {
+      await removeVideoFromPlaylist(playlistId, videoId);
+      const playlist = playlists.find(p => p.id === playlistId);
+      showNotification(`Removed from "${playlist?.name}"`);
+      // Refresh playlists and playlist content
+      loadPlaylists();
+      const updated = await getPlaylist(playlistId);
+      if (selectedPlaylist?.id === playlistId) {
+        setSelectedPlaylist(updated);
+      }
+      if (viewingPlaylist?.id === playlistId) {
+        setViewingPlaylist(updated);
+      }
+    } catch (error) {
+      console.error('Failed to remove video from playlist:', error);
+      showNotification('Failed to remove video', 'error');
+    }
+  };
+
+  // Playlist tab drag handlers for adding videos from library
+  const handlePlaylistTabDragOver = (e) => {
+    if (!selectedPlaylist) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsPlaylistTabDragOver(true);
+  };
+
+  const handlePlaylistTabDragLeave = (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsPlaylistTabDragOver(false);
+    }
+  };
+
+  const handlePlaylistTabDrop = (e) => {
+    e.preventDefault();
+    setIsPlaylistTabDragOver(false);
+
+    if (!selectedPlaylist) return;
+
+    const jsonData = e.dataTransfer.getData('application/json');
+    if (jsonData) {
+      try {
+        const videoData = JSON.parse(jsonData);
+        if (videoData && videoData.id) {
+          handleAddToPlaylist(videoData.id, selectedPlaylist.id);
+        }
+      } catch (err) {
+        console.error('Failed to parse drop data:', err);
+      }
+    }
+  };
+
+  const handleReorderPlaylist = async (videoIds) => {
+    if (!viewingPlaylist) return;
+    try {
+      await reorderPlaylistVideos(viewingPlaylist.id, videoIds);
+      // Refresh the playlist
+      const updated = await getPlaylist(viewingPlaylist.id);
+      setViewingPlaylist(updated);
+      if (selectedPlaylist?.id === viewingPlaylist.id) {
+        setSelectedPlaylist(updated);
+      }
+    } catch (error) {
+      console.error('Failed to reorder playlist:', error);
+      showNotification('Failed to reorder', 'error');
     }
   };
 
@@ -556,15 +667,17 @@ function App() {
     setCrossfadeValue(0);
   }, []);
 
-  const handleSelectPlaylist = useCallback(async (playlistId) => {
+  const handleSelectPlaylist = useCallback(async (playlistId, switchToPlaylistView = false) => {
     try {
       const playlist = await getPlaylist(playlistId);
       setSelectedPlaylist(playlist);
       setPlaylistContentCollapsed(false);
-
-      // Switch to playlist view mode - show playlist videos in the main list
-      setViewMode('playlist');
       setViewingPlaylist(playlist);
+
+      // Only switch to playlist view mode if explicitly requested
+      if (switchToPlaylistView) {
+        setViewMode('playlist');
+      }
 
       // Save to localStorage for persistence
       localStorage.setItem('barmania_selected_playlist', playlistId.toString());
@@ -789,8 +902,30 @@ function App() {
   };
 
   // Toggle the active player (based on crossfade position)
+  // If no videos loaded, load from playlist first
   const toggleActivePlayer = () => {
     const isPlayer1Active = crossfadeValue < 50;
+    const activeVideo = isPlayer1Active ? player1Video : player2Video;
+
+    // If no video loaded, try to load from playlist
+    if (!activeVideo) {
+      const playlistVideos = selectedPlaylist?.videos || [];
+      if (playlistVideos.length === 0) {
+        return; // No videos available
+      }
+      // Load first video into player 1
+      setPlayer1Video(playlistVideos[0]);
+      setRestoredVideoIds(prev => ({ ...prev, player1: null }));
+      // Load second video into player 2 if available
+      if (playlistVideos.length > 1) {
+        setPlayer2Video(playlistVideos[1]);
+        setRestoredVideoIds(prev => ({ ...prev, player2: null }));
+      }
+      setCrossfadeValue(0); // Ensure player 1 is active
+      setAutoPlayEnabled(true);
+      return;
+    }
+
     if (isPlayer1Active) {
       togglePlayer1();
     } else {
@@ -810,6 +945,7 @@ function App() {
   const [autoPlayIndex, setAutoPlayIndex] = useState(0);
   const [isAutoFading, setIsAutoFading] = useState(false);
   const autoFadeIntervalRef = useRef(null);
+  const loadNextVideoTimeoutRef = useRef(null);
 
   // Get the auto-play video list (from selected playlist or viewing playlist)
   const autoPlayVideos = selectedPlaylist?.videos || viewingPlaylist?.videos || [];
@@ -920,11 +1056,14 @@ function App() {
     }
   }, [player1Video, player2Video, crossfadeValue, autoPlayEnabled, autoPlayIndex]);
 
-  // Cleanup interval on unmount only
+  // Cleanup interval and timeout on unmount only
   useEffect(() => {
     return () => {
       if (autoFadeIntervalRef.current) {
         clearInterval(autoFadeIntervalRef.current);
+      }
+      if (loadNextVideoTimeoutRef.current) {
+        clearTimeout(loadNextVideoTimeoutRef.current);
       }
     };
   }, []);
@@ -938,10 +1077,21 @@ function App() {
 
     // Start crossfade when 10 seconds remaining (and song is at least 20 seconds long)
     if (activeState.duration > 20 && remainingTime <= 10 && remainingTime > 0) {
-      setIsAutoFading(true);
-
       // Determine direction based on which player is currently active
       const fadingToPlayer2 = crossfadeValue < 50;
+      const nextPlayerRef = fadingToPlayer2 ? player2Ref : player1Ref;
+      const nextVideo = fadingToPlayer2 ? player2Video : player1Video;
+
+      // Don't start fade if next player has no video
+      if (!nextVideo) return;
+
+      // Ensure next player is playing before we start fading
+      if (nextPlayerRef.current) {
+        nextPlayerRef.current.play();
+      }
+
+      setIsAutoFading(true);
+
       const startValue = fadingToPlayer2 ? 0 : 100;
       const endValue = fadingToPlayer2 ? 100 : 0;
       const fadeStep = fadingToPlayer2 ? 6.25 : -6.25; // 100/16 steps over ~8 seconds
@@ -960,20 +1110,45 @@ function App() {
           autoFadeIntervalRef.current = null;
           setIsAutoFading(false);
 
-          // Load next song on the player that just finished
+          // Stop the player that just finished (faded out)
+          const finishedPlayerRef = fadingToPlayer2 ? player1Ref : player2Ref;
           const finishedPlayer = fadingToPlayer2 ? 1 : 2;
+          const finishedVideo = fadingToPlayer2 ? player1Video : player2Video;
+
+          if (finishedPlayerRef.current) {
+            finishedPlayerRef.current.pause();
+          }
+
+          // Mark the finished player's current video as "restored" so autoStart is false
+          // This prevents unnecessary re-renders when other state changes
+          if (finishedVideo) {
+            setRestoredVideoIds(prev => ({
+              ...prev,
+              [finishedPlayer === 1 ? 'player1' : 'player2']: finishedVideo.youtube_id
+            }));
+          }
+
+          // Load next song on the finished player after 2 seconds
           const nextIndex = autoPlayIndex + 2;
 
           if (nextIndex < autoPlayVideos.length) {
-            if (finishedPlayer === 1) {
-              setPlayer1Video(autoPlayVideos[nextIndex]);
-              // Clear restored ID so the new video auto-starts
-              setRestoredVideoIds(prev => ({ ...prev, player1: null }));
-            } else {
-              setPlayer2Video(autoPlayVideos[nextIndex]);
-              // Clear restored ID so the new video auto-starts
-              setRestoredVideoIds(prev => ({ ...prev, player2: null }));
+            // Clear any pending load timeout
+            if (loadNextVideoTimeoutRef.current) {
+              clearTimeout(loadNextVideoTimeoutRef.current);
             }
+            loadNextVideoTimeoutRef.current = setTimeout(() => {
+              loadNextVideoTimeoutRef.current = null;
+              const nextVideo = autoPlayVideos[nextIndex];
+              if (finishedPlayer === 1) {
+                setPlayer1Video(nextVideo);
+                // Set restored ID to match so it doesn't auto-start
+                setRestoredVideoIds(prev => ({ ...prev, player1: nextVideo.youtube_id }));
+              } else {
+                setPlayer2Video(nextVideo);
+                // Set restored ID to match so it doesn't auto-start
+                setRestoredVideoIds(prev => ({ ...prev, player2: nextVideo.youtube_id }));
+              }
+            }, 2000);
             setAutoPlayIndex(prev => prev + 1);
           }
         } else {
@@ -1573,7 +1748,7 @@ function App() {
       <main className="container mx-auto px-4 py-4">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Left Column - Players (sticky on desktop) */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-4">
             <div className="lg:sticky lg:top-20 flex flex-col gap-3">
               {/* Combined Playlist & Playback Controls */}
               <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} overflow-hidden`}>
@@ -1691,9 +1866,9 @@ function App() {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={toggleActivePlayer}
-                        disabled={!activeVideo}
+                        disabled={!activeVideo && (!selectedPlaylist?.videos?.length)}
                         className={`p-2 rounded-lg transition-colors ${
-                          activeVideo
+                          activeVideo || selectedPlaylist?.videos?.length
                             ? activePlayerState.playing
                               ? 'bg-purple-500 text-white'
                               : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
@@ -1713,9 +1888,9 @@ function App() {
                       </button>
                       <button
                         onClick={skipToNextWithFade}
-                        disabled={isAutoFading}
+                        disabled={isAutoFading || (!player1Video && !player2Video)}
                         className={`p-2 rounded-lg transition-colors ${
-                          !isAutoFading
+                          !isAutoFading && (player1Video || player2Video)
                             ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400'
                             : 'bg-white/5 text-white/30 cursor-not-allowed'
                         }`}
@@ -1753,36 +1928,66 @@ function App() {
                 </div>
               </div>
 
-              {/* Player 1 */}
-              <VideoPlayer
-                ref={player1Ref}
-                video={player1Video}
-                volume={100 - crossfadeValue}
-                playerNumber={1}
-                isActive={crossfadeValue < 50}
-                onTimeUpdate={handleTimeUpdate}
-                onEnded={handlePlaylistVideoEnded}
-                onStateUpdate={handlePlayerStateUpdate}
-                autoStart={player1Video?.youtube_id !== restoredVideoIds.player1}
-              />
+              {/* Player 1 with volume indicator */}
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <VideoPlayer
+                    ref={player1Ref}
+                    video={player1Video}
+                    volume={100 - crossfadeValue}
+                    playerNumber={1}
+                    isActive={crossfadeValue < 50}
+                    onTimeUpdate={handleTimeUpdate}
+                    onEnded={handlePlaylistVideoEnded}
+                    onStateUpdate={handlePlayerStateUpdate}
+                    autoStart={player1Video?.youtube_id !== restoredVideoIds.player1}
+                    onAddToPlaylist={selectedPlaylist ? (videoId) => handleAddToPlaylist(videoId, selectedPlaylist.id) : null}
+                    isInPlaylist={selectedPlaylist?.videos?.some(v => v.id === player1Video?.id)}
+                    onVideoDrop={handlePlayVideo}
+                    showDropOverlay={isGlobalDragging}
+                  />
+                </div>
+                {/* Volume indicator */}
+                <div className="w-3 bg-white/10 rounded-full overflow-hidden flex flex-col-reverse">
+                  <div
+                    className="w-full bg-gradient-to-t from-purple-500 to-purple-400 transition-all duration-300"
+                    style={{ height: `${100 - crossfadeValue}%` }}
+                  />
+                </div>
+              </div>
 
-              {/* Player 2 */}
-              <VideoPlayer
-                ref={player2Ref}
-                video={player2Video}
-                volume={crossfadeValue}
-                playerNumber={2}
-                isActive={crossfadeValue >= 50}
-                onTimeUpdate={handleTimeUpdate}
-                onEnded={handlePlaylistVideoEnded}
-                onStateUpdate={handlePlayerStateUpdate}
-                autoStart={player2Video?.youtube_id !== restoredVideoIds.player2}
-              />
+              {/* Player 2 with volume indicator */}
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <VideoPlayer
+                    ref={player2Ref}
+                    video={player2Video}
+                    volume={crossfadeValue}
+                    playerNumber={2}
+                    isActive={crossfadeValue >= 50}
+                    onTimeUpdate={handleTimeUpdate}
+                    onEnded={handlePlaylistVideoEnded}
+                    onStateUpdate={handlePlayerStateUpdate}
+                    autoStart={player2Video?.youtube_id !== restoredVideoIds.player2}
+                    onAddToPlaylist={selectedPlaylist ? (videoId) => handleAddToPlaylist(videoId, selectedPlaylist.id) : null}
+                    onVideoDrop={handlePlayVideo}
+                    isInPlaylist={selectedPlaylist?.videos?.some(v => v.id === player2Video?.id)}
+                    showDropOverlay={isGlobalDragging}
+                  />
+                </div>
+                {/* Volume indicator */}
+                <div className="w-3 bg-white/10 rounded-full overflow-hidden flex flex-col-reverse">
+                  <div
+                    className="w-full bg-gradient-to-t from-pink-500 to-pink-400 transition-all duration-300"
+                    style={{ height: `${crossfadeValue}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Right Column - Video List */}
-          <div className="lg:col-span-9">
+          <div className="lg:col-span-8">
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden">
               {/* YouTube Search with Autocomplete Dropdown */}
               <div className="relative p-3 border-b border-white/10 bg-gradient-to-r from-red-600/10 to-pink-600/10">
@@ -1794,7 +1999,7 @@ function App() {
                     type="text"
                     value={youtubeSearchQuery}
                     onChange={(e) => handleYoutubeSearchInput(e.target.value)}
-                    onFocus={() => youtubeSearchResults.length > 0 && setShowYoutubeDropdown(true)}
+                    onFocus={() => (youtubeSearchQuery || youtubeSearchResults.length > 0) && setShowYoutubeDropdown(true)}
                     onBlur={(e) => {
                       // Delay to allow click on dropdown items
                       setTimeout(() => setShowYoutubeDropdown(false), 200);
@@ -1942,11 +2147,16 @@ function App() {
                     Library
                   </button>
                   <div
+                    onDragOver={handlePlaylistTabDragOver}
+                    onDragLeave={handlePlaylistTabDragLeave}
+                    onDrop={handlePlaylistTabDrop}
                     className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
                       viewMode === 'playlist'
                         ? 'text-white border-b-2 border-pink-500 bg-pink-500/10'
                         : 'text-purple-300/60 hover:text-white hover:bg-white/5'
-                    } ${!selectedPlaylist ? 'opacity-50' : 'cursor-pointer'}`}
+                    } ${!selectedPlaylist ? 'opacity-50' : 'cursor-pointer'} ${
+                      isPlaylistTabDragOver ? 'ring-2 ring-green-500 bg-green-500/20' : ''
+                    }`}
                   >
                     {selectedPlaylist ? (
                       editingPlaylistName && viewMode === 'playlist' ? (
@@ -2001,6 +2211,28 @@ function App() {
                 <div className="flex items-center justify-center h-64">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
                 </div>
+              ) : viewMode === 'playlist' && viewingPlaylist ? (
+                <PlaylistVideoList
+                  videos={displayVideos}
+                  onReorder={handleReorderPlaylist}
+                  onRemove={(videoId) => handleRemoveFromPlaylist(videoId, viewingPlaylist.id)}
+                  onPlay={(video, index) => {
+                    // Play in current active player
+                    const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
+                    if (activePlayerNumber === 1) {
+                      setPlayer1Video(video);
+                      setRestoredVideoIds(prev => ({ ...prev, player1: null }));
+                    } else {
+                      setPlayer2Video(video);
+                      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
+                    }
+                    // Set playlist mode with this index
+                    setActivePlaylist(viewingPlaylist);
+                    setPlaylistIndex(index);
+                    setPlaylistMode(true);
+                    setAutoPlayEnabled(true);
+                  }}
+                />
               ) : (
                 <VideoList
                   videos={displayVideos}
@@ -2098,7 +2330,7 @@ function App() {
               <div className="border-t border-white/10 my-2" />
 
               {/* Add to selected playlist (quick option) */}
-              {selectedPlaylist && (
+              {selectedPlaylist && !selectedPlaylist.videos?.some(v => v.id === addVideoModal.id) && (
                 <button
                   onClick={() => {
                     handleAddToPlaylist(addVideoModal.id, selectedPlaylist.id);
@@ -2112,6 +2344,24 @@ function App() {
                     </svg>
                   </div>
                   <span className="truncate">Add to {selectedPlaylist.name}</span>
+                </button>
+              )}
+
+              {/* Remove from playlist (when viewing playlist and video is in it) */}
+              {viewMode === 'playlist' && viewingPlaylist && viewingPlaylist.videos?.some(v => v.id === addVideoModal.id) && (
+                <button
+                  onClick={() => {
+                    handleRemoveFromPlaylist(addVideoModal.id, viewingPlaylist.id);
+                    setAddVideoModal(null);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-xl transition-colors"
+                >
+                  <div className="w-6 h-6 bg-red-600 rounded flex items-center justify-center">
+                    <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </div>
+                  <span className="truncate">Remove from {viewingPlaylist.name}</span>
                 </button>
               )}
 
