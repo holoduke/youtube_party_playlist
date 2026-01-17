@@ -1609,39 +1609,40 @@ function App() {
           {/* Left Column - Players (sticky on desktop) */}
           <div className="lg:col-span-4">
             <div className="lg:sticky lg:top-20 flex flex-col gap-3">
-              {/* Playlist Selector Button */}
-              <button
-                onClick={() => setShowPlaylistModal(true)}
-                className="w-full p-3 bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 hover:border-purple-500/50 hover:bg-white/10 transition-all flex items-center gap-3"
-              >
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+              {/* Combined Playlist & Playback Controls */}
+              <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} overflow-hidden`}>
+                {/* Playlist Header */}
+                <div
+                  onClick={() => setShowPlaylistModal(true)}
+                  className="p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors border-b border-white/10"
+                >
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 text-left min-w-0">
+                    {selectedPlaylist ? (
+                      <>
+                        <p className="text-white font-medium text-sm truncate">{selectedPlaylist.name}</p>
+                        <p className="text-purple-300/60 text-xs">{selectedPlaylist.videos?.length || 0} videos</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-white font-medium text-sm">Select Playlist</p>
+                        <p className="text-purple-300/60 text-xs">Choose or create a playlist</p>
+                      </>
+                    )}
+                  </div>
+                  <svg className="w-5 h-5 text-purple-300/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
                   </svg>
                 </div>
-                <div className="flex-1 text-left min-w-0">
-                  {selectedPlaylist ? (
-                    <>
-                      <p className="text-white font-medium text-sm truncate">{selectedPlaylist.name}</p>
-                      <p className="text-purple-300/60 text-xs">{selectedPlaylist.videos?.length || 0} videos</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-white font-medium text-sm">Select Playlist</p>
-                      <p className="text-purple-300/60 text-xs">Choose or create a playlist</p>
-                    </>
-                  )}
-                </div>
-                <svg className="w-5 h-5 text-purple-300/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
 
-              {/* Auto Play Controls */}
-              <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} p-3`}>
-                {!autoPlayEnabled ? (
-                  /* Auto Play Disabled - Simple Toggle */
-                  <div>
+                {/* Playback Controls */}
+                <div className="p-3">
+                  {!autoPlayEnabled ? (
+                    /* Auto Play Disabled - Simple Toggle */
                     <button
                       onClick={enableAutoPlay}
                       disabled={autoPlayVideos.length === 0}
@@ -1661,155 +1662,155 @@ function App() {
                           : 'Select a playlist first'}
                       </span>
                     </button>
-                  </div>
-                ) : (
-                  /* Auto Play Enabled - Full Controls */
-                  <>
-                    {/* Header with disable button */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${isAutoFading ? 'bg-yellow-400' : 'bg-green-400'} animate-pulse`}></span>
-                        <span className={`text-xs font-medium ${isAutoFading ? 'text-yellow-400' : 'text-green-400'}`}>
-                          {isAutoFading ? 'Crossfading...' : 'Auto Play Active'}
-                        </span>
-                        <span className="text-purple-300/40 text-xs">
-                          {autoPlayIndex + 1}/{autoPlayVideos.length}
-                        </span>
+                  ) : (
+                    /* Auto Play Enabled - Full Controls */
+                    <>
+                      {/* Status Header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${isAutoFading ? 'bg-yellow-400' : 'bg-green-400'} animate-pulse`}></span>
+                          <span className={`text-xs font-medium ${isAutoFading ? 'text-yellow-400' : 'text-green-400'}`}>
+                            {isAutoFading ? 'Crossfading...' : 'Playing'}
+                          </span>
+                          <span className="text-purple-300/40 text-xs">
+                            {autoPlayIndex + 1}/{autoPlayVideos.length}
+                          </span>
+                        </div>
+                        <button
+                          onClick={disableAutoPlay}
+                          className="text-purple-300/50 hover:text-white text-xs transition-colors"
+                        >
+                          Stop
+                        </button>
                       </div>
-                      <button
-                        onClick={disableAutoPlay}
-                        className="text-purple-300/50 hover:text-white text-xs transition-colors"
-                      >
-                        Stop
-                      </button>
-                    </div>
 
-                    {/* Now Playing Info */}
-                    <div className="flex items-center gap-3 mb-3">
-                      {/* Thumbnail */}
-                      {activeVideo ? (
-                        <div className="relative w-16 h-10 rounded-lg overflow-hidden bg-black/50 flex-shrink-0">
-                          <img
-                            src={activeVideo.thumbnail_url}
-                            alt={activeVideo.title}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className={`absolute inset-0 border-2 rounded-lg ${activePlayer === 1 ? 'border-purple-500' : 'border-pink-500'}`} />
+                      {/* Now Playing Info */}
+                      <div className="flex items-center gap-3 mb-3">
+                        {/* Thumbnail */}
+                        {activeVideo ? (
+                          <div className="relative w-16 h-10 rounded-lg overflow-hidden bg-black/50 flex-shrink-0">
+                            <img
+                              src={activeVideo.thumbnail_url}
+                              alt={activeVideo.title}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className={`absolute inset-0 border-2 rounded-lg ${activePlayer === 1 ? 'border-purple-500' : 'border-pink-500'}`} />
+                          </div>
+                        ) : (
+                          <div className="w-16 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+                            <span className="text-purple-300/50 text-xs">No video</span>
+                          </div>
+                        )}
+
+                        {/* Song Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium truncate">
+                            {activeVideo ? activeVideo.title : 'No video playing'}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-purple-300/60">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${activePlayer === 1 ? 'bg-purple-500/30 text-purple-300' : 'bg-pink-500/30 text-pink-300'}`}>
+                              P{activePlayer}
+                            </span>
+                            {activePlayerState.duration > 0 && (
+                              <>
+                                <span>{formatTime(activePlayerState.currentTime)}</span>
+                                <span>/</span>
+                                <span>{formatTime(activePlayerState.duration)}</span>
+                                <span className="text-purple-300/40">
+                                  (-{formatTime(activePlayerState.duration - activePlayerState.currentTime)})
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Play/Pause Controls */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={togglePlayer1}
+                            disabled={!player1Video}
+                            className={`p-2 rounded-lg transition-colors ${
+                              player1Video
+                                ? player1State.playing
+                                  ? 'bg-purple-500 text-white'
+                                  : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
+                                : 'bg-white/5 text-white/30 cursor-not-allowed'
+                            }`}
+                            title={`${player1State.playing ? 'Pause' : 'Play'} Player 1`}
+                          >
+                            {player1State.playing ? (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              </svg>
+                            )}
+                          </button>
+                          <button
+                            onClick={togglePlayer2}
+                            disabled={!player2Video}
+                            className={`p-2 rounded-lg transition-colors ${
+                              player2Video
+                                ? player2State.playing
+                                  ? 'bg-pink-500 text-white'
+                                  : 'bg-pink-500/30 text-pink-300 hover:bg-pink-500/50'
+                                : 'bg-white/5 text-white/30 cursor-not-allowed'
+                            }`}
+                            title={`${player2State.playing ? 'Pause' : 'Play'} Player 2`}
+                          >
+                            {player2State.playing ? (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              </svg>
+                            )}
+                          </button>
+                          <button
+                            onClick={skipToNextWithFade}
+                            disabled={isAutoFading}
+                            className={`p-2 rounded-lg transition-colors ${
+                              !isAutoFading
+                                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400'
+                                : 'bg-white/5 text-white/30 cursor-not-allowed'
+                            }`}
+                            title="Crossfade to other player (8s)"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Next Up */}
+                      {autoPlayNextVideo ? (
+                        <div className="flex items-center gap-2 pt-2 border-t border-white/10">
+                          <span className="text-purple-300/50 text-xs">Next:</span>
+                          <div className="w-8 h-5 rounded overflow-hidden bg-black/50 flex-shrink-0">
+                            <img
+                              src={autoPlayNextVideo.thumbnail_url}
+                              alt={autoPlayNextVideo.title}
+                              className="w-full h-full object-cover opacity-60"
+                            />
+                          </div>
+                          <p className="text-purple-300/70 text-xs truncate flex-1">{autoPlayNextVideo.title}</p>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${activePlayer === 1 ? 'bg-pink-500/20 text-pink-300/70' : 'bg-purple-500/20 text-purple-300/70'}`}>
+                            P{activePlayer === 1 ? 2 : 1}
+                          </span>
                         </div>
                       ) : (
-                        <div className="w-16 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-purple-300/50 text-xs">No video</span>
+                        <div className="flex items-center gap-2 pt-2 border-t border-white/10">
+                          <span className="text-purple-300/40 text-xs">End of playlist</span>
                         </div>
                       )}
-
-                      {/* Song Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">
-                          {activeVideo ? activeVideo.title : 'No video playing'}
-                        </p>
-                        <div className="flex items-center gap-2 text-xs text-purple-300/60">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${activePlayer === 1 ? 'bg-purple-500/30 text-purple-300' : 'bg-pink-500/30 text-pink-300'}`}>
-                            P{activePlayer}
-                          </span>
-                          {activePlayerState.duration > 0 && (
-                            <>
-                              <span>{formatTime(activePlayerState.currentTime)}</span>
-                              <span>/</span>
-                              <span>{formatTime(activePlayerState.duration)}</span>
-                              <span className="text-purple-300/40">
-                                (-{formatTime(activePlayerState.duration - activePlayerState.currentTime)})
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Play/Pause Controls */}
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={togglePlayer1}
-                          disabled={!player1Video}
-                          className={`p-2 rounded-lg transition-colors ${
-                            player1Video
-                              ? player1State.playing
-                                ? 'bg-purple-500 text-white'
-                                : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
-                              : 'bg-white/5 text-white/30 cursor-not-allowed'
-                          }`}
-                          title={`${player1State.playing ? 'Pause' : 'Play'} Player 1`}
-                        >
-                          {player1State.playing ? (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            </svg>
-                          )}
-                        </button>
-                        <button
-                          onClick={togglePlayer2}
-                          disabled={!player2Video}
-                          className={`p-2 rounded-lg transition-colors ${
-                            player2Video
-                              ? player2State.playing
-                                ? 'bg-pink-500 text-white'
-                                : 'bg-pink-500/30 text-pink-300 hover:bg-pink-500/50'
-                              : 'bg-white/5 text-white/30 cursor-not-allowed'
-                          }`}
-                          title={`${player2State.playing ? 'Pause' : 'Play'} Player 2`}
-                        >
-                          {player2State.playing ? (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            </svg>
-                          )}
-                        </button>
-                        <button
-                          onClick={skipToNextWithFade}
-                          disabled={isAutoFading}
-                          className={`p-2 rounded-lg transition-colors ${
-                            !isAutoFading
-                              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400'
-                              : 'bg-white/5 text-white/30 cursor-not-allowed'
-                          }`}
-                          title="Crossfade to other player (8s)"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Next Up */}
-                    {autoPlayNextVideo ? (
-                      <div className="flex items-center gap-2 pt-2 border-t border-white/10">
-                        <span className="text-purple-300/50 text-xs">Next:</span>
-                        <div className="w-8 h-5 rounded overflow-hidden bg-black/50 flex-shrink-0">
-                          <img
-                            src={autoPlayNextVideo.thumbnail_url}
-                            alt={autoPlayNextVideo.title}
-                            className="w-full h-full object-cover opacity-60"
-                          />
-                        </div>
-                        <p className="text-purple-300/70 text-xs truncate flex-1">{autoPlayNextVideo.title}</p>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${activePlayer === 1 ? 'bg-pink-500/20 text-pink-300/70' : 'bg-purple-500/20 text-purple-300/70'}`}>
-                          P{activePlayer === 1 ? 2 : 1}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 pt-2 border-t border-white/10">
-                        <span className="text-purple-300/40 text-xs">End of playlist</span>
-                      </div>
-                    )}
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Player 1 */}
