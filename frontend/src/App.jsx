@@ -1539,51 +1539,9 @@ function App() {
 
             {/* Right side controls */}
             <div className="flex items-center gap-3">
-              {/* Publish Button */}
-              {selectedPlaylist && (
-                <button
-                  onClick={async () => {
-                    if (selectedPlaylist.is_public) {
-                      // Already public - show modal with share info
-                      setShowPublishModal(true);
-                    } else {
-                      // Make it public and show modal
-                      try {
-                        await updatePlaylist(selectedPlaylist.id, { is_public: true });
-                        const updated = await getPlaylist(selectedPlaylist.id);
-                        setSelectedPlaylist(updated);
-                        if (viewingPlaylist?.id === selectedPlaylist.id) {
-                          setViewingPlaylist(updated);
-                        }
-                        loadPlaylists();
-                        setShowPublishModal(true);
-                      } catch (error) {
-                        console.error('Failed to publish playlist:', error);
-                        showNotification('Failed to publish playlist', 'error');
-                      }
-                    }
-                  }}
-                  className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg shadow-lg transition-all flex-shrink-0 ${
-                    selectedPlaylist.is_public
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 shadow-green-500/20'
-                      : 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-gray-500/20'
-                  }`}
-                  title={selectedPlaylist.is_public ? 'View share info' : 'Publish playlist'}
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    {selectedPlaylist.is_public ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    ) : (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    )}
-                  </svg>
-                  <span className="hidden sm:inline">{selectedPlaylist.is_public ? 'Published' : 'Publish'}</span>
-                </button>
-              )}
-
               {/* Current User Display */}
               {currentUser && (
-                <div className="flex items-center gap-2 pl-3 border-l border-white/10 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                     {currentUser.name.charAt(0)}
                   </div>
@@ -1612,31 +1570,73 @@ function App() {
               {/* Combined Playlist & Playback Controls */}
               <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} overflow-hidden`}>
                 {/* Playlist Header */}
-                <div
-                  onClick={() => setShowPlaylistModal(true)}
-                  className="p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors border-b border-white/10"
-                >
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                <div className="p-3 flex items-center gap-3 border-b border-white/10">
+                  <div
+                    onClick={() => setShowPlaylistModal(true)}
+                    className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+                  >
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left min-w-0">
+                      {selectedPlaylist ? (
+                        <>
+                          <p className="text-white font-medium text-sm truncate">{selectedPlaylist.name}</p>
+                          <p className="text-purple-300/60 text-xs">{selectedPlaylist.videos?.length || 0} videos</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-white font-medium text-sm">Select Playlist</p>
+                          <p className="text-purple-300/60 text-xs">Choose or create a playlist</p>
+                        </>
+                      )}
+                    </div>
+                    <svg className="w-5 h-5 text-purple-300/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
                     </svg>
                   </div>
-                  <div className="flex-1 text-left min-w-0">
-                    {selectedPlaylist ? (
-                      <>
-                        <p className="text-white font-medium text-sm truncate">{selectedPlaylist.name}</p>
-                        <p className="text-purple-300/60 text-xs">{selectedPlaylist.videos?.length || 0} videos</p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-white font-medium text-sm">Select Playlist</p>
-                        <p className="text-purple-300/60 text-xs">Choose or create a playlist</p>
-                      </>
-                    )}
-                  </div>
-                  <svg className="w-5 h-5 text-purple-300/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-                  </svg>
+
+                  {/* Publish Button */}
+                  {selectedPlaylist && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (selectedPlaylist.is_public) {
+                          setShowPublishModal(true);
+                        } else {
+                          try {
+                            await updatePlaylist(selectedPlaylist.id, { is_public: true });
+                            const updated = await getPlaylist(selectedPlaylist.id);
+                            setSelectedPlaylist(updated);
+                            if (viewingPlaylist?.id === selectedPlaylist.id) {
+                              setViewingPlaylist(updated);
+                            }
+                            loadPlaylists();
+                            setShowPublishModal(true);
+                          } catch (error) {
+                            console.error('Failed to publish playlist:', error);
+                            showNotification('Failed to publish playlist', 'error');
+                          }
+                        }
+                      }}
+                      className={`p-2 rounded-lg transition-all flex-shrink-0 ${
+                        selectedPlaylist.is_public
+                          ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                          : 'bg-white/10 text-purple-300/60 hover:bg-white/20 hover:text-white'
+                      }`}
+                      title={selectedPlaylist.is_public ? 'View share link' : 'Publish playlist'}
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {selectedPlaylist.is_public ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        )}
+                      </svg>
+                    </button>
+                  )}
                 </div>
 
                 {/* Playback Controls */}
@@ -1668,10 +1668,20 @@ function App() {
                       {/* Status Header */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${isAutoFading ? 'bg-yellow-400' : 'bg-green-400'} animate-pulse`}></span>
-                          <span className={`text-xs font-medium ${isAutoFading ? 'text-yellow-400' : 'text-green-400'}`}>
-                            {isAutoFading ? 'Crossfading...' : 'Playing'}
-                          </span>
+                          {(() => {
+                            const isPlaying = player1State.playing || player2State.playing;
+                            const statusColor = isAutoFading ? 'bg-yellow-400' : isPlaying ? 'bg-green-400' : 'bg-purple-400';
+                            const textColor = isAutoFading ? 'text-yellow-400' : isPlaying ? 'text-green-400' : 'text-purple-400';
+                            const statusText = isAutoFading ? 'Crossfading...' : isPlaying ? 'Playing' : 'Paused';
+                            return (
+                              <>
+                                <span className={`w-2 h-2 rounded-full ${statusColor} ${isPlaying || isAutoFading ? 'animate-pulse' : ''}`}></span>
+                                <span className={`text-xs font-medium ${textColor}`}>
+                                  {statusText}
+                                </span>
+                              </>
+                            );
+                          })()}
                           <span className="text-purple-300/40 text-xs">
                             {autoPlayIndex + 1}/{autoPlayVideos.length}
                           </span>
