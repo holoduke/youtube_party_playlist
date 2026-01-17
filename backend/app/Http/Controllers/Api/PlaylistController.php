@@ -22,12 +22,17 @@ class PlaylistController extends Controller
         return $query->get();
     }
 
-    // GET /api/playlists/public?search=X - Search public playlists
+    // GET /api/playlists/public?search=X&exclude_user_id=X - Search public playlists
     public function publicIndex(Request $request)
     {
         $query = Playlist::withCount('videos')
             ->with('user:id,name')
             ->where('is_public', true);
+
+        // Exclude current user's playlists from public list
+        if ($request->has('exclude_user_id')) {
+            $query->where('user_id', '!=', $request->exclude_user_id);
+        }
 
         if ($request->has('search') && $request->search) {
             $query->where('name', 'like', '%' . $request->search . '%');

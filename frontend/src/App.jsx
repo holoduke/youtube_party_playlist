@@ -364,7 +364,8 @@ function App() {
     setPublicPlaylistsLoading(true);
     publicSearchTimeoutRef.current = setTimeout(async () => {
       try {
-        const results = await getPublicPlaylists(value || null);
+        // Exclude current user's playlists from public results
+        const results = await getPublicPlaylists(value || null, currentUser?.id);
         setPublicPlaylists(results);
       } catch (error) {
         console.error('Failed to search public playlists:', error);

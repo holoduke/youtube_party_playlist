@@ -58,8 +58,10 @@ export const getPlaylists = async (userId = null) => {
   return response.data;
 };
 
-export const getPublicPlaylists = async (search = null) => {
-  const params = search ? { search } : {};
+export const getPublicPlaylists = async (search = null, excludeUserId = null) => {
+  const params = {};
+  if (search) params.search = search;
+  if (excludeUserId) params.exclude_user_id = excludeUserId;
   const response = await api.get('/playlists/public', { params });
   return response.data;
 };
