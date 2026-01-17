@@ -521,8 +521,9 @@ function App() {
       autoFadeIntervalRef.current = null;
     }
 
-    // Clear saved playback state
+    // Clear saved playback state and selected playlist
     localStorage.removeItem('barmania_playback_state');
+    localStorage.removeItem('barmania_selected_playlist');
 
     // Call the actual logout
     logout();
@@ -576,13 +577,15 @@ function App() {
   useEffect(() => {
     if (playlists.length > 0 && !selectedPlaylist) {
       const savedPlaylistId = localStorage.getItem('barmania_selected_playlist');
-      // Use saved playlist or default to first playlist
-      const playlistId = savedPlaylistId ? parseInt(savedPlaylistId, 10) : playlists[0].id;
+      // Only use saved playlist if it belongs to the current user's playlists
+      const savedId = savedPlaylistId ? parseInt(savedPlaylistId, 10) : null;
+      const savedPlaylistBelongsToUser = savedId && playlists.some(p => p.id === savedId);
+      const playlistId = savedPlaylistBelongsToUser ? savedId : playlists[0].id;
 
       handleSelectPlaylist(playlistId)
         .then(() => {
-          // After playlist is loaded, restore playback state (only if we had a saved playlist)
-          if (savedPlaylistId) {
+          // After playlist is loaded, restore playback state (only if playlist belonged to user)
+          if (savedPlaylistBelongsToUser) {
             const savedState = localStorage.getItem('barmania_playback_state');
             if (savedState) {
               try {
