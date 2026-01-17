@@ -1563,7 +1563,7 @@ function App() {
       <main className="container mx-auto px-4 py-4">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Left Column - Players (sticky on desktop) */}
-          <div className="lg:col-span-4">
+          <div className="lg:col-span-3">
             <div className="lg:sticky lg:top-20 flex flex-col gap-3">
               {/* Combined Playlist & Playback Controls */}
               <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} overflow-hidden`}>
@@ -1794,7 +1794,7 @@ function App() {
           </div>
 
           {/* Right Column - Video List */}
-          <div className="lg:col-span-8">
+          <div className="lg:col-span-9">
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden">
               {/* YouTube Search with Autocomplete Dropdown */}
               <div className="relative p-3 border-b border-white/10 bg-gradient-to-r from-red-600/10 to-pink-600/10">
