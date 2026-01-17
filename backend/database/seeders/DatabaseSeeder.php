@@ -14,10 +14,8 @@ class DatabaseSeeder extends Seeder
     {
         // Hardcoded users for simple user selection
         $users = [
-            ['name' => 'DJ Mike', 'email' => 'mike@barmania.local', 'password' => bcrypt('password')],
-            ['name' => 'Sarah', 'email' => 'sarah@barmania.local', 'password' => bcrypt('password')],
-            ['name' => 'Alex', 'email' => 'alex@barmania.local', 'password' => bcrypt('password')],
-            ['name' => 'Jordan', 'email' => 'jordan@barmania.local', 'password' => bcrypt('password')],
+            ['name' => 'Arjan', 'email' => 'arjan@barmania.local', 'password' => bcrypt('password')],
+            ['name' => 'Gillis', 'email' => 'gillis@barmania.local', 'password' => bcrypt('password')],
         ];
 
         foreach ($users as $userData) {
