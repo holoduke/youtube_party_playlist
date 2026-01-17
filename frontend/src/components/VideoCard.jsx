@@ -6,8 +6,7 @@ const getFallbackThumbnail = (youtubeId) => {
   return `https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`;
 };
 
-export default function VideoCard({ video, onPlay, playlists, onAddToPlaylist }) {
-  const [showPlaylistMenu, setShowPlaylistMenu] = useState(false);
+export default function VideoCard({ video, onShowAddModal }) {
   const [isDragging, setIsDragging] = useState(false);
   const [imgError, setImgError] = useState(false);
 
@@ -15,11 +14,6 @@ export default function VideoCard({ video, onPlay, playlists, onAddToPlaylist })
   const thumbnailUrl = imgError
     ? getFallbackThumbnail(video.youtube_id)
     : (video.thumbnail_url || getFallbackThumbnail(video.youtube_id));
-
-  const handleAddToPlaylist = (playlistId) => {
-    onAddToPlaylist(video.id, playlistId);
-    setShowPlaylistMenu(false);
-  };
 
   const handleDragStart = (e) => {
     e.dataTransfer.setData('application/json', JSON.stringify(video));
@@ -57,67 +51,21 @@ export default function VideoCard({ video, onPlay, playlists, onAddToPlaylist })
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-        {/* Play buttons */}
-        <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
+        {/* Add button */}
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
           <button
-            onClick={() => onPlay(video, 1)}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-all duration-300 transform hover:scale-105 shadow-lg"
+            onClick={(e) => {
+              e.stopPropagation();
+              onShowAddModal(video);
+            }}
+            className="p-2 bg-black/60 hover:bg-purple-600 text-white rounded-lg transition-colors"
+            title="Add to..."
           >
-            Player 1
-          </button>
-          <button
-            onClick={() => onPlay(video, 2)}
-            className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-medium transition-all duration-300 transform hover:scale-105 shadow-lg"
-          >
-            Player 2
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
           </button>
         </div>
-
-        {/* Add to Playlist button */}
-        {playlists && playlists.length > 0 && (
-          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <div className="relative">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowPlaylistMenu(!showPlaylistMenu);
-                }}
-                className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-lg transition-colors"
-                title="Add to playlist"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-
-              {/* Playlist dropdown */}
-              {showPlaylistMenu && (
-                <div
-                  className="absolute right-0 top-full mt-1 w-48 bg-gray-900 border border-white/20 rounded-lg shadow-xl z-50 overflow-hidden"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="p-2 border-b border-white/10">
-                    <span className="text-xs text-purple-300 font-medium">Add to playlist</span>
-                  </div>
-                  <div className="max-h-48 overflow-y-auto">
-                    {playlists.map((playlist) => (
-                      <button
-                        key={playlist.id}
-                        onClick={() => handleAddToPlaylist(playlist.id)}
-                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-purple-600/30 transition-colors flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                        </svg>
-                        <span className="truncate">{playlist.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="p-3">
@@ -135,14 +83,6 @@ export default function VideoCard({ video, onPlay, playlists, onAddToPlaylist })
           ))}
         </div>
       </div>
-
-      {/* Click outside to close menu */}
-      {showPlaylistMenu && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setShowPlaylistMenu(false)}
-        />
-      )}
     </div>
   );
 }

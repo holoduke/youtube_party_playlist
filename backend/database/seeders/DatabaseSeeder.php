@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Category;
+use App\Models\Playlist;
 use App\Models\User;
 use App\Models\Video;
 use Illuminate\Database\Seeder;
@@ -19,8 +20,15 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Jordan', 'email' => 'jordan@barmania.local', 'password' => bcrypt('password')],
         ];
 
-        foreach ($users as $user) {
-            User::create($user);
+        foreach ($users as $userData) {
+            $user = User::create($userData);
+
+            // Create a default playlist for each user
+            Playlist::create([
+                'name' => 'My Playlist',
+                'user_id' => $user->id,
+                'is_public' => false,
+            ]);
         }
 
         // Categories: 1=60's, 2=70's, 3=80's, 4=90's, 5=Rock, 6=Pop, 7=Hiphop, 8=Dance,

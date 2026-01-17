@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate } from 'react-router-dom';
-import { getCategories, getVideos, getPlaylists, getPlaylist, addVideoToPlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId } from './services/api';
+import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, createPlaylist, updatePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId } from './services/api';
 import { initEcho, broadcastState } from './services/playerSync';
 import { useUser } from './contexts/UserContext';
 import CategoryFilter from './components/CategoryFilter';
@@ -43,16 +43,23 @@ function App() {
 
   // Party mode modal state
   const [showPartyModal, setShowPartyModal] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
   const [partyPlaylistSearch, setPartyPlaylistSearch] = useState('');
   const [partySelectedPlaylist, setPartySelectedPlaylist] = useState(null);
   const [partyDropdownOpen, setPartyDropdownOpen] = useState(false);
   const [partyLiveResult, setPartyLiveResult] = useState(null);
   const [partyLoading, setPartyLoading] = useState(false);
 
-  // Header playlist selector state
-  const [headerPlaylistSearch, setHeaderPlaylistSearch] = useState('');
-  const [headerPlaylistDropdownOpen, setHeaderPlaylistDropdownOpen] = useState(false);
-  const [playlistDropZoneActive, setPlaylistDropZoneActive] = useState(false);
+  // Playlist modal state
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [playlistModalTab, setPlaylistModalTab] = useState('my'); // 'my' | 'public' | 'create'
+  const [publicPlaylistSearch, setPublicPlaylistSearch] = useState('');
+  const [publicPlaylists, setPublicPlaylists] = useState([]);
+  const [publicPlaylistsLoading, setPublicPlaylistsLoading] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [newPlaylistPublic, setNewPlaylistPublic] = useState(false);
+  const [creatingPlaylist, setCreatingPlaylist] = useState(false);
+  const publicSearchTimeoutRef = useRef(null);
 
   // YouTube search state
   const [youtubeSearchQuery, setYoutubeSearchQuery] = useState('');
@@ -62,12 +69,23 @@ function App() {
   const [importingVideoId, setImportingVideoId] = useState(null);
   const youtubeSearchTimeoutRef = useRef(null);
 
+  // Add video modal state
+  const [addVideoModal, setAddVideoModal] = useState(null); // null or video object
+  const [showPlaylistSubmenu, setShowPlaylistSubmenu] = useState(false);
+
+  // Inline playlist name editing
+  const [editingPlaylistName, setEditingPlaylistName] = useState(false);
+  const [editedPlaylistName, setEditedPlaylistName] = useState('');
+  const playlistNameInputRef = useRef(null);
+
   // Player refs and state
   const player1Ref = useRef(null);
   const player2Ref = useRef(null);
   const [player1State, setPlayer1State] = useState({ playing: false, currentTime: 0, duration: 0 });
   const [player2State, setPlayer2State] = useState({ playing: false, currentTime: 0, duration: 0 });
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
+  // Track which videos were restored (should not auto-start)
+  const [restoredVideoIds, setRestoredVideoIds] = useState({ player1: null, player2: null });
 
   // Get the remote URL for QR code
   const getRemoteUrl = () => {
@@ -126,50 +144,6 @@ function App() {
     p.name.toLowerCase().includes(partyPlaylistSearch.toLowerCase())
   );
 
-  // Filter playlists for header dropdown
-  const filteredHeaderPlaylists = playlists.filter(p =>
-    p.name.toLowerCase().includes(headerPlaylistSearch.toLowerCase())
-  );
-
-  // Handle drop on playlist selector
-  const handlePlaylistDrop = async (e) => {
-    e.preventDefault();
-    setPlaylistDropZoneActive(false);
-
-    if (!selectedPlaylist) {
-      showNotification('Select a playlist first', 'error');
-      return;
-    }
-
-    try {
-      const videoData = JSON.parse(e.dataTransfer.getData('application/json'));
-      if (videoData && videoData.id) {
-        await addVideoToPlaylist(selectedPlaylist.id, videoData.id);
-        showNotification(`Added "${videoData.title}" to ${selectedPlaylist.name}`);
-        // Refresh playlist
-        const updated = await getPlaylist(selectedPlaylist.id);
-        setSelectedPlaylist(updated);
-        if (viewingPlaylist?.id === selectedPlaylist.id) {
-          setViewingPlaylist(updated);
-        }
-        loadPlaylists();
-      }
-    } catch (error) {
-      console.error('Failed to add video:', error);
-      showNotification('Failed to add video', 'error');
-    }
-  };
-
-  const handlePlaylistDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    setPlaylistDropZoneActive(true);
-  };
-
-  const handlePlaylistDragLeave = () => {
-    setPlaylistDropZoneActive(false);
-  };
-
   // YouTube search handler with debounce and URL detection
   const handleYoutubeSearchInput = (value) => {
     setYoutubeSearchQuery(value);
@@ -227,11 +201,13 @@ function App() {
     try {
       // Import the video first
       const imported = await importYouTubeVideo(video);
-      // Then play it
+      // Then play it - clear restored ID so it auto-starts
       if (playerNumber === 1) {
         setPlayer1Video(imported);
+        setRestoredVideoIds(prev => ({ ...prev, player1: null }));
       } else {
         setPlayer2Video(imported);
+        setRestoredVideoIds(prev => ({ ...prev, player2: null }));
       }
       // Stop playlist mode when manually selecting
       setPlaylistMode(false);
@@ -242,6 +218,36 @@ function App() {
     } catch (error) {
       console.error('Failed to import video:', error);
       showNotification('Failed to play video', 'error');
+    }
+    setImportingVideoId(null);
+  };
+
+  // Add a YouTube search result to the library (and optionally to playlist)
+  const handleAddYoutubeToLibrary = async (video, addToPlaylist = false) => {
+    setImportingVideoId(video.youtube_id);
+    try {
+      // Import the video to library
+      const imported = await importYouTubeVideo(video);
+
+      if (addToPlaylist && selectedPlaylist) {
+        // Also add to playlist
+        await addVideoToPlaylist(selectedPlaylist.id, imported.id);
+        showNotification(`Added "${video.title}" to ${selectedPlaylist.name}`);
+        // Refresh playlist
+        const updated = await getPlaylist(selectedPlaylist.id);
+        setSelectedPlaylist(updated);
+        if (viewingPlaylist?.id === selectedPlaylist.id) {
+          setViewingPlaylist(updated);
+        }
+        loadPlaylists();
+      } else {
+        showNotification(`Added "${video.title}" to library`);
+      }
+      // Refresh library videos
+      loadVideos();
+    } catch (error) {
+      console.error('Failed to add video:', error);
+      showNotification('Failed to add video', 'error');
     }
     setImportingVideoId(null);
   };
@@ -326,15 +332,118 @@ function App() {
     }
   };
 
+  const handleCreatePlaylist = async () => {
+    if (!newPlaylistName.trim() || !currentUser) return;
+    setCreatingPlaylist(true);
+    try {
+      const playlist = await createPlaylist({
+        name: newPlaylistName.trim(),
+        user_id: currentUser.id,
+        is_public: newPlaylistPublic,
+      });
+      showNotification(`Created playlist "${playlist.name}"`);
+      setNewPlaylistName('');
+      setNewPlaylistPublic(false);
+      setShowPlaylistModal(false);
+      loadPlaylists();
+      // Select the newly created playlist
+      handleSelectPlaylist(playlist.id);
+    } catch (error) {
+      console.error('Failed to create playlist:', error);
+      showNotification('Failed to create playlist', 'error');
+    }
+    setCreatingPlaylist(false);
+  };
+
+  // Search public playlists with debounce
+  const handlePublicPlaylistSearch = (value) => {
+    setPublicPlaylistSearch(value);
+    if (publicSearchTimeoutRef.current) {
+      clearTimeout(publicSearchTimeoutRef.current);
+    }
+    setPublicPlaylistsLoading(true);
+    publicSearchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await getPublicPlaylists(value || null);
+        setPublicPlaylists(results);
+      } catch (error) {
+        console.error('Failed to search public playlists:', error);
+      }
+      setPublicPlaylistsLoading(false);
+    }, 300);
+  };
+
+  // Load public playlists when tab is selected
+  const handlePlaylistModalTabChange = (tab) => {
+    setPlaylistModalTab(tab);
+    if (tab === 'public' && publicPlaylists.length === 0) {
+      handlePublicPlaylistSearch('');
+    }
+  };
+
+  // Start editing playlist name
+  const startEditingPlaylistName = () => {
+    if (viewingPlaylist) {
+      setEditedPlaylistName(viewingPlaylist.name);
+      setEditingPlaylistName(true);
+      // Focus the input after it renders
+      setTimeout(() => playlistNameInputRef.current?.focus(), 0);
+    }
+  };
+
+  // Save edited playlist name
+  const savePlaylistName = async () => {
+    if (!viewingPlaylist || !editedPlaylistName.trim()) {
+      setEditingPlaylistName(false);
+      return;
+    }
+
+    const newName = editedPlaylistName.trim();
+    if (newName === viewingPlaylist.name) {
+      setEditingPlaylistName(false);
+      return;
+    }
+
+    try {
+      await updatePlaylist(viewingPlaylist.id, { name: newName });
+      // Update local state
+      setViewingPlaylist(prev => ({ ...prev, name: newName }));
+      if (selectedPlaylist?.id === viewingPlaylist.id) {
+        setSelectedPlaylist(prev => ({ ...prev, name: newName }));
+      }
+      loadPlaylists();
+      showNotification('Playlist renamed');
+    } catch (error) {
+      console.error('Failed to update playlist name:', error);
+      showNotification('Failed to rename playlist', 'error');
+    }
+    setEditingPlaylistName(false);
+  };
+
+  // Cancel editing playlist name
+  const cancelEditingPlaylistName = () => {
+    setEditingPlaylistName(false);
+    setEditedPlaylistName('');
+  };
+
+  // Select a playlist from the modal
+  const handleSelectPlaylistFromModal = async (playlistId) => {
+    await handleSelectPlaylist(playlistId);
+    setShowPlaylistModal(false);
+  };
+
   const handlePlayVideo = (video, playerNumber) => {
     // Stop playlist mode when manually selecting a video
     setPlaylistMode(false);
     setActivePlaylist(null);
 
+    // Clear restored video ID so manual selections auto-start
     if (playerNumber === 1) {
       setPlayer1Video(video);
+      setRestoredVideoIds(prev => ({ ...prev, player1: null }));
     } else {
       setPlayer2Video(video);
+      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
     }
   };
 
@@ -342,11 +451,13 @@ function App() {
     // Odd indices (0, 2, 4...) go to Player 1, even indices (1, 3, 5...) go to Player 2
     const playerNumber = index % 2 === 0 ? 1 : 2;
 
-    // Set the video on the appropriate player
+    // Set the video on the appropriate player - clear restored IDs for user action
     if (playerNumber === 1) {
       setPlayer1Video(video);
+      setRestoredVideoIds(prev => ({ ...prev, player1: null }));
     } else {
       setPlayer2Video(video);
+      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
     }
 
     // If we have a selected playlist, activate playlist mode
@@ -361,8 +472,10 @@ function App() {
         const nextVideo = selectedPlaylist.videos[nextIndex];
         if (playerNumber === 1) {
           setPlayer2Video(nextVideo);
+          setRestoredVideoIds(prev => ({ ...prev, player2: null }));
         } else {
           setPlayer1Video(nextVideo);
+          setRestoredVideoIds(prev => ({ ...prev, player1: null }));
         }
       }
     }
@@ -405,11 +518,13 @@ function App() {
     setPlaylistIndex(0);
     setPlaylistMode(true);
 
-    // Start first video on player 1
+    // Start first video on player 1 - clear restored IDs for user action
     setPlayer1Video(playlist.videos[0]);
+    setRestoredVideoIds(prev => ({ ...prev, player1: null }));
     // Queue second video on player 2 if available
     if (playlist.videos.length > 1) {
       setPlayer2Video(playlist.videos[1]);
+      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
     }
     // Start with crossfade at 0 (player 1 active)
     setCrossfadeValue(0);
@@ -424,10 +539,61 @@ function App() {
       // Switch to playlist view mode - show playlist videos in the main list
       setViewMode('playlist');
       setViewingPlaylist(playlist);
+
+      // Save to localStorage for persistence
+      localStorage.setItem('barmania_selected_playlist', playlistId.toString());
     } catch (error) {
       console.error('Failed to load playlist:', error);
     }
   }, []);
+
+  // Restore saved playlist and playback state after playlists are loaded
+  useEffect(() => {
+    if (playlists.length > 0 && !selectedPlaylist) {
+      const savedPlaylistId = localStorage.getItem('barmania_selected_playlist');
+      // Use saved playlist or default to first playlist
+      const playlistId = savedPlaylistId ? parseInt(savedPlaylistId, 10) : playlists[0].id;
+
+      handleSelectPlaylist(playlistId)
+        .then(() => {
+          // After playlist is loaded, restore playback state (only if we had a saved playlist)
+          if (savedPlaylistId) {
+            const savedState = localStorage.getItem('barmania_playback_state');
+            if (savedState) {
+              try {
+                const state = JSON.parse(savedState);
+                // Track which videos are being restored (they shouldn't auto-start)
+                const restored = { player1: null, player2: null };
+                if (state.player1Video) {
+                  setPlayer1Video(state.player1Video);
+                  restored.player1 = state.player1Video.youtube_id;
+                }
+                if (state.player2Video) {
+                  setPlayer2Video(state.player2Video);
+                  restored.player2 = state.player2Video.youtube_id;
+                }
+                setRestoredVideoIds(restored);
+                if (typeof state.crossfadeValue === 'number') setCrossfadeValue(state.crossfadeValue);
+                if (state.autoPlayEnabled) {
+                  setAutoPlayEnabled(true);
+                  if (typeof state.autoPlayIndex === 'number') setAutoPlayIndex(state.autoPlayIndex);
+                }
+              } catch (e) {
+                console.error('Failed to restore playback state:', e);
+              }
+            }
+          }
+        })
+        .catch(() => {
+          // If playlist doesn't exist anymore, clear localStorage and try first playlist
+          localStorage.removeItem('barmania_selected_playlist');
+          localStorage.removeItem('barmania_playback_state');
+          if (playlists.length > 0) {
+            handleSelectPlaylist(playlists[0].id);
+          }
+        });
+    }
+  }, [playlists, selectedPlaylist, handleSelectPlaylist]);
 
   const handlePlaylistContentUpdate = useCallback((updatedPlaylist) => {
     // Update selectedPlaylist if it matches
@@ -625,10 +791,12 @@ function App() {
     setAutoPlayIndex(0);
     setCrossfadeValue(0); // Start with P1 active
 
-    // Load first two videos
+    // Load first two videos - clear restored IDs for user action
     setPlayer1Video(autoPlayVideos[0]);
+    setRestoredVideoIds(prev => ({ ...prev, player1: null }));
     if (autoPlayVideos.length > 1) {
       setPlayer2Video(autoPlayVideos[1]);
+      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
     } else {
       setPlayer2Video(null);
     }
@@ -649,6 +817,80 @@ function App() {
     }
   }, []);
 
+  // Manual crossfade between the two players
+  const skipToNextWithFade = useCallback(() => {
+    // Don't start if already fading
+    if (isAutoFading) {
+      return;
+    }
+
+    // Clear any existing interval
+    if (autoFadeIntervalRef.current) {
+      clearInterval(autoFadeIntervalRef.current);
+    }
+
+    setIsAutoFading(true);
+
+    // Determine which player is currently active based on crossfade position
+    const fadingToPlayer2 = crossfadeValue < 50;
+    const nextPlayer = fadingToPlayer2 ? 2 : 1;
+
+    // Start the next player
+    if (nextPlayer === 1 && player1Ref.current) {
+      player1Ref.current.play();
+    } else if (nextPlayer === 2 && player2Ref.current) {
+      player2Ref.current.play();
+    }
+
+    // Fade settings: 8 seconds total, update every 200ms = 40 steps
+    const startValue = fadingToPlayer2 ? 0 : 100;
+    const endValue = fadingToPlayer2 ? 100 : 0;
+    const totalSteps = 40;
+    const stepSize = (endValue - startValue) / totalSteps;
+    let step = 0;
+
+    // Set initial position
+    setCrossfadeValue(startValue);
+
+    autoFadeIntervalRef.current = setInterval(() => {
+      step++;
+      const newValue = startValue + (stepSize * step);
+
+      if (step >= totalSteps) {
+        // Fade complete
+        setCrossfadeValue(endValue);
+        clearInterval(autoFadeIntervalRef.current);
+        autoFadeIntervalRef.current = null;
+        setIsAutoFading(false);
+      } else {
+        setCrossfadeValue(newValue);
+      }
+    }, 200);
+  }, [isAutoFading, crossfadeValue]);
+
+  // Save playback state to localStorage when it changes
+  useEffect(() => {
+    if (player1Video || player2Video || autoPlayEnabled) {
+      const state = {
+        player1Video,
+        player2Video,
+        crossfadeValue,
+        autoPlayEnabled,
+        autoPlayIndex,
+      };
+      localStorage.setItem('barmania_playback_state', JSON.stringify(state));
+    }
+  }, [player1Video, player2Video, crossfadeValue, autoPlayEnabled, autoPlayIndex]);
+
+  // Cleanup interval on unmount only
+  useEffect(() => {
+    return () => {
+      if (autoFadeIntervalRef.current) {
+        clearInterval(autoFadeIntervalRef.current);
+      }
+    };
+  }, []);
+
   // Auto-crossfade effect - watch for songs nearing end
   useEffect(() => {
     if (!autoPlayEnabled || isAutoFading) return;
@@ -660,30 +902,39 @@ function App() {
     if (activeState.duration > 20 && remainingTime <= 10 && remainingTime > 0) {
       setIsAutoFading(true);
 
-      // Calculate crossfade step (fade over ~8 seconds)
-      const fadeStep = crossfadeValue < 50 ? 6.25 : -6.25; // 100/16 steps
-      let currentFade = crossfadeValue;
+      // Determine direction based on which player is currently active
+      const fadingToPlayer2 = crossfadeValue < 50;
+      const startValue = fadingToPlayer2 ? 0 : 100;
+      const endValue = fadingToPlayer2 ? 100 : 0;
+      const fadeStep = fadingToPlayer2 ? 6.25 : -6.25; // 100/16 steps over ~8 seconds
+
+      // Start from clean extreme
+      let currentFade = startValue;
+      setCrossfadeValue(startValue);
 
       autoFadeIntervalRef.current = setInterval(() => {
         currentFade += fadeStep;
 
-        if ((fadeStep > 0 && currentFade >= 100) || (fadeStep < 0 && currentFade <= 0)) {
-          // Fade complete
-          currentFade = fadeStep > 0 ? 100 : 0;
-          setCrossfadeValue(currentFade);
+        if ((fadingToPlayer2 && currentFade >= 100) || (!fadingToPlayer2 && currentFade <= 0)) {
+          // Fade complete - set to exact end value
+          setCrossfadeValue(endValue);
           clearInterval(autoFadeIntervalRef.current);
           autoFadeIntervalRef.current = null;
           setIsAutoFading(false);
 
           // Load next song on the player that just finished
-          const finishedPlayer = fadeStep > 0 ? 1 : 2;
+          const finishedPlayer = fadingToPlayer2 ? 1 : 2;
           const nextIndex = autoPlayIndex + 2;
 
           if (nextIndex < autoPlayVideos.length) {
             if (finishedPlayer === 1) {
               setPlayer1Video(autoPlayVideos[nextIndex]);
+              // Clear restored ID so the new video auto-starts
+              setRestoredVideoIds(prev => ({ ...prev, player1: null }));
             } else {
               setPlayer2Video(autoPlayVideos[nextIndex]);
+              // Clear restored ID so the new video auto-starts
+              setRestoredVideoIds(prev => ({ ...prev, player2: null }));
             }
             setAutoPlayIndex(prev => prev + 1);
           }
@@ -692,12 +943,6 @@ function App() {
         }
       }, 500); // Update every 500ms
     }
-
-    return () => {
-      if (autoFadeIntervalRef.current) {
-        clearInterval(autoFadeIntervalRef.current);
-      }
-    };
   }, [autoPlayEnabled, isAutoFading, crossfadeValue, player1State, player2State, autoPlayIndex, autoPlayVideos]);
 
   // Get the "active" player based on crossfade
@@ -932,6 +1177,334 @@ function App() {
         </div>
       )}
 
+      {/* Publish Modal with QR Code */}
+      {showPublishModal && selectedPlaylist && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowPublishModal(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-gradient-to-br from-purple-900/90 to-pink-900/90 backdrop-blur-xl rounded-3xl border border-purple-500/30 p-8 max-w-md w-full mx-4 shadow-2xl">
+            {/* Close button */}
+            <button
+              onClick={() => setShowPublishModal(false)}
+              className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="text-center">
+              <div className="mb-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                  Playlist Published!
+                </h2>
+                <p className="text-purple-200/70 text-sm mt-1">
+                  "{selectedPlaylist.name}" is now public
+                </p>
+              </div>
+
+              {/* QR Code */}
+              <div className="bg-white p-4 rounded-2xl inline-block mb-4">
+                <QRCodeSVG
+                  value={`${window.location.origin}/?playlist=${selectedPlaylist.id}`}
+                  size={180}
+                  level="H"
+                  includeMargin={false}
+                />
+              </div>
+
+              {/* URL Display */}
+              <div className="bg-black/30 rounded-xl p-3 mb-4">
+                <p className="text-purple-300/60 text-xs mb-1 uppercase tracking-wide">Share this URL</p>
+                <p className="text-white font-mono text-sm break-all select-all">
+                  {`${window.location.origin}/?playlist=${selectedPlaylist.id}`}
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/?playlist=${selectedPlaylist.id}`);
+                    showNotification('URL copied to clipboard!');
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy URL
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await updatePlaylist(selectedPlaylist.id, { is_public: false });
+                      const updated = await getPlaylist(selectedPlaylist.id);
+                      setSelectedPlaylist(updated);
+                      if (viewingPlaylist?.id === selectedPlaylist.id) {
+                        setViewingPlaylist(updated);
+                      }
+                      loadPlaylists();
+                      setShowPublishModal(false);
+                      showNotification('Playlist unpublished');
+                    } catch (error) {
+                      console.error('Failed to unpublish:', error);
+                      showNotification('Failed to unpublish', 'error');
+                    }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Unpublish
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Playlist Selection Modal */}
+      {showPlaylistModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowPlaylistModal(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-gradient-to-br from-purple-900/90 to-pink-900/90 backdrop-blur-xl rounded-3xl border border-purple-500/30 p-6 max-w-md w-full mx-4 shadow-2xl max-h-[80vh] flex flex-col">
+            {/* Close button */}
+            <button
+              onClick={() => setShowPlaylistModal(false)}
+              className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Header */}
+            <div className="text-center mb-4">
+              <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Select Playlist
+              </h2>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-1 p-1 bg-white/10 rounded-xl mb-4">
+              <button
+                onClick={() => handlePlaylistModalTabChange('my')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  playlistModalTab === 'my'
+                    ? 'bg-purple-500 text-white'
+                    : 'text-purple-300 hover:text-white'
+                }`}
+              >
+                My Playlists
+              </button>
+              <button
+                onClick={() => handlePlaylistModalTabChange('public')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  playlistModalTab === 'public'
+                    ? 'bg-purple-500 text-white'
+                    : 'text-purple-300 hover:text-white'
+                }`}
+              >
+                Public
+              </button>
+              <button
+                onClick={() => handlePlaylistModalTabChange('create')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  playlistModalTab === 'create'
+                    ? 'bg-purple-500 text-white'
+                    : 'text-purple-300 hover:text-white'
+                }`}
+              >
+                Create
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-y-auto">
+              {/* My Playlists Tab */}
+              {playlistModalTab === 'my' && (
+                <div className="space-y-2">
+                  {playlists.length > 0 ? (
+                    playlists.map((playlist) => (
+                      <button
+                        key={playlist.id}
+                        onClick={() => handleSelectPlaylistFromModal(playlist.id)}
+                        className={`w-full p-3 rounded-xl transition-colors flex items-center gap-3 ${
+                          selectedPlaylist?.id === playlist.id
+                            ? 'bg-purple-500/30 border border-purple-500'
+                            : 'bg-white/5 hover:bg-white/10 border border-transparent'
+                        }`}
+                      >
+                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 text-left min-w-0">
+                          <p className="text-white font-medium text-sm truncate">{playlist.name}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-purple-300/60 text-xs">{playlist.videos_count || 0} videos</span>
+                            {playlist.is_public && (
+                              <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded text-[10px]">Public</span>
+                            )}
+                          </div>
+                        </div>
+                        {selectedPlaylist?.id === playlist.id && (
+                          <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-purple-300/60">
+                      <p>No playlists yet</p>
+                      <button
+                        onClick={() => setPlaylistModalTab('create')}
+                        className="mt-2 text-purple-400 hover:text-purple-300 text-sm"
+                      >
+                        Create your first playlist
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Public Playlists Tab */}
+              {playlistModalTab === 'public' && (
+                <div>
+                  {/* Search */}
+                  <div className="relative mb-3">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-300/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={publicPlaylistSearch}
+                      onChange={(e) => handlePublicPlaylistSearch(e.target.value)}
+                      placeholder="Search public playlists..."
+                      className="w-full pl-10 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300/50 focus:outline-none focus:border-purple-500 text-sm"
+                    />
+                  </div>
+
+                  {/* Results */}
+                  <div className="space-y-2">
+                    {publicPlaylistsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="w-6 h-6 border-2 border-purple-300/30 border-t-purple-400 rounded-full animate-spin" />
+                      </div>
+                    ) : publicPlaylists.length > 0 ? (
+                      publicPlaylists.map((playlist) => (
+                        <button
+                          key={playlist.id}
+                          onClick={() => handleSelectPlaylistFromModal(playlist.id)}
+                          className="w-full p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent transition-colors flex items-center gap-3"
+                        >
+                          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="text-white font-medium text-sm truncate">{playlist.name}</p>
+                            <p className="text-purple-300/60 text-xs">
+                              {playlist.videos_count || 0} videos · by {playlist.user?.name || 'Unknown'}
+                            </p>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-purple-300/60">
+                        <p>No public playlists found</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Create Playlist Tab */}
+              {playlistModalTab === 'create' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-purple-300 text-sm mb-2">Playlist Name</label>
+                    <input
+                      type="text"
+                      value={newPlaylistName}
+                      onChange={(e) => setNewPlaylistName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCreatePlaylist();
+                      }}
+                      placeholder="My awesome playlist..."
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-purple-300/50 focus:outline-none focus:border-purple-500 transition-colors"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <div
+                        onClick={() => setNewPlaylistPublic(!newPlaylistPublic)}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${
+                          newPlaylistPublic ? 'bg-green-500' : 'bg-white/20'
+                        }`}
+                      >
+                        <div
+                          className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                            newPlaylistPublic ? 'translate-x-7' : 'translate-x-1'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-white text-sm font-medium">Public Playlist</p>
+                        <p className="text-purple-300/60 text-xs">Anyone can find and use this playlist</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={handleCreatePlaylist}
+                    disabled={!newPlaylistName.trim() || creatingPlaylist}
+                    className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 disabled:from-purple-500/50 disabled:to-pink-500/50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2"
+                  >
+                    {creatingPlaylist ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Create Playlist
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="sticky top-0 z-50 bg-black/30 backdrop-blur-xl border-b border-white/10">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
@@ -942,16 +1515,47 @@ function App() {
 
             {/* Right side controls */}
             <div className="flex items-center gap-3">
-              {/* Go Live Button */}
-              <button
-                onClick={() => setShowPartyModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white text-sm font-medium rounded-lg shadow-lg shadow-green-500/20 transition-all flex-shrink-0"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" />
-                </svg>
-                <span className="hidden sm:inline">Go Live</span>
-              </button>
+              {/* Publish Button */}
+              {selectedPlaylist && (
+                <button
+                  onClick={async () => {
+                    if (selectedPlaylist.is_public) {
+                      // Already public - show modal with share info
+                      setShowPublishModal(true);
+                    } else {
+                      // Make it public and show modal
+                      try {
+                        await updatePlaylist(selectedPlaylist.id, { is_public: true });
+                        const updated = await getPlaylist(selectedPlaylist.id);
+                        setSelectedPlaylist(updated);
+                        if (viewingPlaylist?.id === selectedPlaylist.id) {
+                          setViewingPlaylist(updated);
+                        }
+                        loadPlaylists();
+                        setShowPublishModal(true);
+                      } catch (error) {
+                        console.error('Failed to publish playlist:', error);
+                        showNotification('Failed to publish playlist', 'error');
+                      }
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg shadow-lg transition-all flex-shrink-0 ${
+                    selectedPlaylist.is_public
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 shadow-green-500/20'
+                      : 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-gray-500/20'
+                  }`}
+                  title={selectedPlaylist.is_public ? 'View share info' : 'Publish playlist'}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    {selectedPlaylist.is_public ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    )}
+                  </svg>
+                  <span className="hidden sm:inline">{selectedPlaylist.is_public ? 'Published' : 'Publish'}</span>
+                </button>
+              )}
 
               {/* Current User Display */}
               {currentUser && (
@@ -981,143 +1585,33 @@ function App() {
           {/* Left Column - Players (sticky on desktop) */}
           <div className="lg:col-span-4">
             <div className="lg:sticky lg:top-20 flex flex-col gap-3">
-              {/* Playlist Selector */}
-              <div
-                className={`relative z-50 p-3 bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${
-                  playlistDropZoneActive
-                    ? 'border-green-500 bg-green-500/20 ring-2 ring-green-500 ring-dashed'
-                    : 'border-white/10'
-                }`}
-                onDrop={handlePlaylistDrop}
-                onDragOver={handlePlaylistDragOver}
-                onDragLeave={handlePlaylistDragLeave}
+              {/* Playlist Selector Button */}
+              <button
+                onClick={() => setShowPlaylistModal(true)}
+                className="w-full p-3 bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 hover:border-purple-500/50 hover:bg-white/10 transition-all flex items-center gap-3"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
                   </svg>
-                  <span className="text-white text-sm font-medium">Playlist</span>
-                  {playlistMode && activePlaylist && (
-                    <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full text-xs">
-                      <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-                      Playing
-                    </span>
-                  )}
-                  <span className="text-purple-300/40 text-xs ml-auto">Drop to add</span>
                 </div>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      value={selectedPlaylist ? selectedPlaylist.name : headerPlaylistSearch}
-                      onChange={(e) => {
-                        setHeaderPlaylistSearch(e.target.value);
-                        setSelectedPlaylist(null);
-                        setHeaderPlaylistDropdownOpen(true);
-                      }}
-                      onFocus={() => setHeaderPlaylistDropdownOpen(true)}
-                      placeholder={playlistDropZoneActive ? "Drop to add!" : "Select..."}
-                      className={`w-full px-3 py-2 border rounded-lg text-white placeholder-purple-300/50 focus:outline-none text-sm transition-all ${
-                        playlistDropZoneActive
-                          ? 'bg-green-500/20 border-green-500 placeholder-green-300'
-                          : 'bg-white/10 border-white/20 focus:border-purple-500'
-                      }`}
-                    />
-                    <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-300/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-
-                    {/* Dropdown */}
-                    {headerPlaylistDropdownOpen && (
-                      <div className="absolute left-0 z-[60] w-full mt-1 bg-gray-900/98 backdrop-blur-xl border border-purple-500/30 rounded-lg shadow-2xl max-h-48 overflow-y-auto">
-                        {filteredHeaderPlaylists.length > 0 ? (
-                          filteredHeaderPlaylists.map((playlist) => (
-                            <button
-                              key={playlist.id}
-                              onClick={() => {
-                                handleSelectPlaylist(playlist.id);
-                                setHeaderPlaylistSearch('');
-                                setHeaderPlaylistDropdownOpen(false);
-                              }}
-                              className="w-full px-3 py-2 text-left hover:bg-purple-500/20 transition-colors flex items-center gap-2"
-                            >
-                              <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-pink-500 rounded flex items-center justify-center flex-shrink-0">
-                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-                                </svg>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-white text-sm truncate">{playlist.name}</p>
-                                <p className="text-purple-300/60 text-xs">{playlist.videos_count || 0} videos</p>
-                              </div>
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-purple-300/60 text-sm text-center">
-                            No playlists
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Playlist Controls */}
-                  {selectedPlaylist && (
-                    <div className="flex gap-1">
-                      {/* Play/Stop Button */}
-                      {playlistMode && activePlaylist?.id === selectedPlaylist.id ? (
-                        <button
-                          onClick={stopPlaylist}
-                          className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
-                          title="Stop playlist"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                          </svg>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => selectedPlaylist && handlePlayPlaylist(selectedPlaylist)}
-                          disabled={!selectedPlaylist.videos || selectedPlaylist.videos.length === 0}
-                          className="px-3 py-2 bg-green-600 hover:bg-green-500 disabled:bg-green-600/50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                          title="Play playlist"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                      )}
-
-                      {/* View Button */}
-                      {viewMode !== 'playlist' && (
-                        <button
-                          onClick={() => {
-                            setViewMode('playlist');
-                            setViewingPlaylist(selectedPlaylist);
-                          }}
-                          className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
-                          title="View playlist"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
+                <div className="flex-1 text-left min-w-0">
+                  {selectedPlaylist ? (
+                    <>
+                      <p className="text-white font-medium text-sm truncate">{selectedPlaylist.name}</p>
+                      <p className="text-purple-300/60 text-xs">{selectedPlaylist.videos?.length || 0} videos</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-white font-medium text-sm">Select Playlist</p>
+                      <p className="text-purple-300/60 text-xs">Choose or create a playlist</p>
+                    </>
                   )}
                 </div>
-
-                {/* Click outside to close dropdown */}
-                {headerPlaylistDropdownOpen && (
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setHeaderPlaylistDropdownOpen(false)}
-                  />
-                )}
-              </div>
+                <svg className="w-5 h-5 text-purple-300/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
 
               {/* Auto Play Controls */}
               <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} p-3`}>
@@ -1290,6 +1784,7 @@ function App() {
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={handlePlaylistVideoEnded}
                 onStateUpdate={handlePlayerStateUpdate}
+                autoStart={player1Video?.youtube_id !== restoredVideoIds.player1}
               />
 
               {/* Player 2 */}
@@ -1302,11 +1797,28 @@ function App() {
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={handlePlaylistVideoEnded}
                 onStateUpdate={handlePlayerStateUpdate}
+                autoStart={player2Video?.youtube_id !== restoredVideoIds.player2}
               />
 
               {/* Crossfader */}
               <div className="bg-white/5 backdrop-blur rounded-xl p-3 border border-white/10">
-                <Crossfader value={crossfadeValue} onChange={setCrossfadeValue} />
+                <div className="flex items-center justify-center gap-3">
+                  <Crossfader value={crossfadeValue} onChange={setCrossfadeValue} />
+                  <button
+                    onClick={skipToNextWithFade}
+                    disabled={isAutoFading}
+                    className={`p-2 rounded-lg transition-all ${
+                      !isAutoFading
+                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500'
+                        : 'bg-white/10 text-white/30 cursor-not-allowed'
+                    }`}
+                    title="Crossfade to other player (8s)"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1347,7 +1859,7 @@ function App() {
 
                   {/* Autocomplete Dropdown */}
                   {showYoutubeDropdown && youtubeSearchQuery && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-gray-900/98 backdrop-blur-xl border border-red-500/30 rounded-xl shadow-2xl shadow-black/50 max-h-[400px] overflow-y-auto z-50">
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-gray-900/98 backdrop-blur-xl border border-red-500/30 rounded-xl shadow-2xl shadow-black/50 max-h-[70vh] overflow-y-auto z-[100]">
                       {youtubeSearchLoading && youtubeSearchResults.length === 0 ? (
                         <div className="flex items-center justify-center py-8">
                           <div className="w-6 h-6 border-2 border-red-300/30 border-t-red-400 rounded-full animate-spin" />
@@ -1387,7 +1899,7 @@ function App() {
                                 <h4 className="text-white text-sm font-medium line-clamp-2">{video.title}</h4>
                               </div>
 
-                              {/* Play buttons */}
+                              {/* Action buttons */}
                               <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                   onClick={() => handlePlayYoutubeResult(video, 1)}
@@ -1411,6 +1923,28 @@ function App() {
                                   </svg>
                                   P2
                                 </button>
+                                <button
+                                  onClick={() => handleAddYoutubeToLibrary(video, false)}
+                                  disabled={importingVideoId === video.youtube_id}
+                                  className="flex items-center gap-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white rounded-lg transition-colors text-xs font-medium"
+                                  title="Add to library"
+                                >
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                </button>
+                                {selectedPlaylist && (
+                                  <button
+                                    onClick={() => handleAddYoutubeToLibrary(video, true)}
+                                    disabled={importingVideoId === video.youtube_id}
+                                    className="flex items-center gap-1 px-2 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-green-600/50 text-white rounded-lg transition-colors text-xs font-medium"
+                                    title={`Add to ${selectedPlaylist.name}`}
+                                  >
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                                    </svg>
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1429,39 +1963,76 @@ function App() {
                 )}
               </div>
 
-              {/* Playlist View Header or Category Filter */}
-              {viewMode === 'playlist' && viewingPlaylist ? (
-                <div className="border-b border-white/10 p-3 flex items-center justify-between bg-gradient-to-r from-purple-600/10 to-pink-600/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h2 className="text-white font-semibold text-sm">{viewingPlaylist.name}</h2>
-                      <p className="text-purple-300/60 text-xs">{viewingPlaylist.videos?.length || 0} videos</p>
-                    </div>
-                  </div>
+              {/* Library / Playlist Tabs */}
+              <div className="border-b border-white/10">
+                <div className="flex">
                   <button
-                    onClick={() => handleCategorySelect(null)}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm"
+                    onClick={() => {
+                      setViewMode('categories');
+                      setViewingPlaylist(null);
+                    }}
+                    className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
+                      viewMode === 'categories'
+                        ? 'text-white border-b-2 border-purple-500 bg-purple-500/10'
+                        : 'text-purple-300/60 hover:text-white hover:bg-white/5'
+                    }`}
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                    <span className="hidden sm:inline">Back to Library</span>
+                    Library
                   </button>
+                  <div
+                    className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
+                      viewMode === 'playlist'
+                        ? 'text-white border-b-2 border-pink-500 bg-pink-500/10'
+                        : 'text-purple-300/60 hover:text-white hover:bg-white/5'
+                    } ${!selectedPlaylist ? 'opacity-50' : 'cursor-pointer'}`}
+                  >
+                    {selectedPlaylist ? (
+                      editingPlaylistName && viewMode === 'playlist' ? (
+                        <input
+                          ref={playlistNameInputRef}
+                          type="text"
+                          value={editedPlaylistName}
+                          onChange={(e) => setEditedPlaylistName(e.target.value)}
+                          onBlur={savePlaylistName}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') savePlaylistName();
+                            if (e.key === 'Escape') cancelEditingPlaylistName();
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full bg-white/10 border border-pink-500 rounded px-2 py-0.5 text-white text-sm text-center focus:outline-none"
+                        />
+                      ) : (
+                        <span
+                          className="flex items-center justify-center gap-2"
+                          onClick={() => {
+                            if (viewMode === 'playlist') {
+                              startEditingPlaylistName();
+                            } else if (selectedPlaylist) {
+                              setViewMode('playlist');
+                              setViewingPlaylist(selectedPlaylist);
+                            }
+                          }}
+                          title={viewMode === 'playlist' ? 'Click to rename' : 'Click to view playlist'}
+                        >
+                          <span className="truncate max-w-[120px]">{selectedPlaylist.name}</span>
+                          <span className="text-xs opacity-60">({selectedPlaylist.videos?.length || 0})</span>
+                        </span>
+                      )
+                    ) : (
+                      <span className="cursor-not-allowed">Playlist</span>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <div className="border-b border-white/10">
+
+                {/* Category filter for Library view */}
+                {viewMode === 'categories' && (
                   <CategoryFilter
                     categories={categories}
                     selectedCategory={selectedCategory}
                     onSelect={handleCategorySelect}
                   />
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Video List */}
               {loading && viewMode === 'categories' ? (
@@ -1471,16 +2042,160 @@ function App() {
               ) : (
                 <VideoList
                   videos={displayVideos}
-                  onPlay={handlePlayVideo}
-                  playlists={playlists}
-                  onAddToPlaylist={handleAddToPlaylist}
-                  selectedPlaylistId={selectedPlaylist?.id}
+                  onShowAddModal={(video) => {
+                    setAddVideoModal(video);
+                    setShowPlaylistSubmenu(false);
+                  }}
                 />
               )}
             </div>
           </div>
         </div>
       </main>
+
+      {/* Add Video Modal */}
+      {addVideoModal && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[400] flex items-center justify-center p-4"
+          onClick={() => {
+            setAddVideoModal(null);
+            setShowPlaylistSubmenu(false);
+          }}
+        >
+          <div
+            className="bg-gray-900 border border-white/20 rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Video Preview */}
+            <div className="relative aspect-video bg-gray-800">
+              {addVideoModal.thumbnail_url || addVideoModal.youtube_id ? (
+                <img
+                  src={addVideoModal.thumbnail_url || `https://img.youtube.com/vi/${addVideoModal.youtube_id}/mqdefault.jpg`}
+                  alt={addVideoModal.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/50 to-pink-900/50">
+                  <svg className="w-16 h-16 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent" />
+              <div className="absolute bottom-3 left-3 right-3">
+                <h3 className="text-white font-medium text-sm line-clamp-2">{addVideoModal.title}</h3>
+              </div>
+              {/* Close button */}
+              <button
+                onClick={() => {
+                  setAddVideoModal(null);
+                  setShowPlaylistSubmenu(false);
+                }}
+                className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Actions */}
+            <div className="p-3 space-y-2">
+              {/* Player buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    handlePlayVideo(addVideoModal, 1);
+                    setAddVideoModal(null);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors font-medium"
+                >
+                  <div className="w-6 h-6 bg-white/20 rounded flex items-center justify-center text-xs font-bold">1</div>
+                  <span>Player 1</span>
+                </button>
+                <button
+                  onClick={() => {
+                    handlePlayVideo(addVideoModal, 2);
+                    setAddVideoModal(null);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-pink-600 hover:bg-pink-500 text-white rounded-xl transition-colors font-medium"
+                >
+                  <div className="w-6 h-6 bg-white/20 rounded flex items-center justify-center text-xs font-bold">2</div>
+                  <span>Player 2</span>
+                </button>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-white/10 my-2" />
+
+              {/* Add to selected playlist (quick option) */}
+              {selectedPlaylist && (
+                <button
+                  onClick={() => {
+                    handleAddToPlaylist(addVideoModal.id, selectedPlaylist.id);
+                    setAddVideoModal(null);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded-xl transition-colors"
+                >
+                  <div className="w-6 h-6 bg-green-600 rounded flex items-center justify-center">
+                    <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  <span className="truncate">Add to {selectedPlaylist.name}</span>
+                </button>
+              )}
+
+              {/* Add to other playlist */}
+              {playlists && playlists.length > (selectedPlaylist ? 1 : 0) && (
+                <div>
+                  <button
+                    onClick={() => setShowPlaylistSubmenu(!showPlaylistSubmenu)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 bg-white/20 rounded flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                        </svg>
+                      </div>
+                      <span>{selectedPlaylist ? 'Other playlist...' : 'Add to playlist...'}</span>
+                    </div>
+                    <svg className={`w-4 h-4 transition-transform ${showPlaylistSubmenu ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+
+                  {/* Playlist submenu */}
+                  {showPlaylistSubmenu && (
+                    <div className="mt-2 max-h-40 overflow-y-auto space-y-1">
+                      {playlists
+                        .filter(p => p.id !== selectedPlaylist?.id)
+                        .map((playlist) => (
+                          <button
+                            key={playlist.id}
+                            onClick={() => {
+                              handleAddToPlaylist(addVideoModal.id, playlist.id);
+                              setAddVideoModal(null);
+                              setShowPlaylistSubmenu(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-purple-600/30 rounded-lg transition-colors"
+                          >
+                            <svg className="w-4 h-4 text-purple-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                            </svg>
+                            <span className="truncate">{playlist.name}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

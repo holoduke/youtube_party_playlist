@@ -51,13 +51,19 @@ export const getPlaylists = async (userId = null) => {
   return response.data;
 };
 
+export const getPublicPlaylists = async (search = null) => {
+  const params = search ? { search } : {};
+  const response = await api.get('/playlists/public', { params });
+  return response.data;
+};
+
 export const getPlaylist = async (id) => {
   const response = await api.get(`/playlists/${id}`);
   return response.data;
 };
 
 export const createPlaylist = async (data) => {
-  // data should include: { name, user_id, description? }
+  // data should include: { name, user_id, description?, is_public? }
   const response = await api.post('/playlists', data);
   return response.data;
 };

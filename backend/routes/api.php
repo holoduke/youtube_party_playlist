@@ -17,6 +17,7 @@ Route::apiResource('categories', CategoryController::class)->only(['index', 'sho
 Route::apiResource('videos', VideoController::class)->only(['index', 'show']);
 
 // Playlists (with user_id filter support)
+Route::get('/playlists/public', [PlaylistController::class, 'publicIndex']);
 Route::apiResource('playlists', PlaylistController::class);
 Route::post('/playlists/{playlist}/videos', [PlaylistController::class, 'addVideo']);
 Route::delete('/playlists/{playlist}/videos/{video}', [PlaylistController::class, 'removeVideo']);

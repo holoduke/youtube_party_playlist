@@ -1,14 +1,8 @@
 export default function Crossfader({ value, onChange }) {
-  const player1Volume = 100 - value;
-  const player2Volume = value;
-
   return (
-    <div className="flex flex-col items-center gap-4 py-4">
+    <div className="flex flex-col items-center gap-2 py-2">
       <div className="flex items-center gap-4">
-        <div className="text-center">
-          <div className="text-purple-400 text-xs font-medium mb-1">Player 1</div>
-          <div className="text-white text-lg font-bold">{player1Volume}%</div>
-        </div>
+        <div className="text-purple-400 text-xs font-medium">P1</div>
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
@@ -33,13 +27,8 @@ export default function Crossfader({ value, onChange }) {
           />
         </div>
 
-        <div className="text-center">
-          <div className="text-pink-400 text-xs font-medium mb-1">Player 2</div>
-          <div className="text-white text-lg font-bold">{player2Volume}%</div>
-        </div>
+        <div className="text-pink-400 text-xs font-medium">P2</div>
       </div>
-
-      <div className="text-xs text-purple-300/60">Crossfader</div>
     </div>
   );
 }

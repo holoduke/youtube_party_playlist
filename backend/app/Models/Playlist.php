@@ -11,6 +11,7 @@ class Playlist extends Model
         'name',
         'description',
         'user_id',
+        'is_public',
         'status',
         'share_code',
         'host_code',
@@ -20,6 +21,7 @@ class Playlist extends Model
     ];
 
     protected $casts = [
+        'is_public' => 'boolean',
         'state' => 'array',
         'queue' => 'array',
         'likes' => 'array',

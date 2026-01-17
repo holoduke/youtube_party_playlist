@@ -2,7 +2,7 @@ import YouTube from 'react-youtube';
 import { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import WaveVisualizer from './WaveVisualizer';
 
-const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, frequencyData, onStateUpdate }, ref) => {
+const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, frequencyData, onStateUpdate, autoStart = true }, ref) => {
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -27,9 +27,17 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     getRemainingTime: () => Math.max(0, duration - currentTime),
   }));
 
+  // Track if volume needs to be applied when player becomes ready
+  const pendingVolumeRef = useRef(volume);
+  pendingVolumeRef.current = volume;
+
   useEffect(() => {
     if (playerRef.current) {
-      playerRef.current.setVolume(volume);
+      try {
+        playerRef.current.setVolume(volume);
+      } catch (e) {
+        // Player might be in an invalid state during video change
+      }
     }
   }, [volume]);
 
@@ -41,8 +49,14 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     };
   }, []);
 
-  // Reset state when video changes
+  // Reset state and clear player ref when video changes
   useEffect(() => {
+    // Clear the player ref since the YouTube component will create a new player
+    playerRef.current = null;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
@@ -72,7 +86,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     height: '100%',
     host: 'https://www.youtube-nocookie.com',
     playerVars: {
-      autoplay: 1,
+      autoplay: autoStart ? 1 : 0,
       controls: 1,
       modestbranding: 1,
       rel: 0,
@@ -84,7 +98,8 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
 
   const onReady = (event) => {
     playerRef.current = event.target;
-    event.target.setVolume(volume);
+    // Use the ref to ensure we get the latest volume value
+    event.target.setVolume(pendingVolumeRef.current);
     startTimeTracking();
   };
 
@@ -93,6 +108,12 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     if (event.data === 1) {
       setIsPlaying(true);
       startTimeTracking();
+      // Ensure volume is correct when playback starts
+      if (playerRef.current) {
+        try {
+          playerRef.current.setVolume(pendingVolumeRef.current);
+        } catch (e) {}
+      }
       onStateUpdate?.(playerNumber, 'playing', { currentTime, duration });
     } else if (event.data === 0) {
       setIsPlaying(false);

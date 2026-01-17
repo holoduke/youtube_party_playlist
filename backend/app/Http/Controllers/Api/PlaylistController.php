@@ -22,6 +22,20 @@ class PlaylistController extends Controller
         return $query->get();
     }
 
+    // GET /api/playlists/public?search=X - Search public playlists
+    public function publicIndex(Request $request)
+    {
+        $query = Playlist::withCount('videos')
+            ->with('user:id,name')
+            ->where('is_public', true);
+
+        if ($request->has('search') && $request->search) {
+            $query->where('name', 'like', '%' . $request->search . '%');
+        }
+
+        return $query->orderBy('created_at', 'desc')->limit(50)->get();
+    }
+
     // POST /api/playlists - Create playlist with user ownership
     public function store(Request $request)
     {
@@ -29,6 +43,7 @@ class PlaylistController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'user_id' => 'required|exists:users,id',
+            'is_public' => 'nullable|boolean',
         ]);
 
         $playlist = Playlist::create($validated);
@@ -48,6 +63,7 @@ class PlaylistController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
+            'is_public' => 'nullable|boolean',
         ]);
 
         $playlist->update($validated);

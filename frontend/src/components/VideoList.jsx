@@ -1,6 +1,6 @@
 import VideoCard from './VideoCard';
 
-export default function VideoList({ videos, onPlay, playlists, onAddToPlaylist }) {
+export default function VideoList({ videos, onShowAddModal }) {
   if (!videos.length) {
     return (
       <div className="flex items-center justify-center h-64 text-purple-300">
@@ -15,9 +15,7 @@ export default function VideoList({ videos, onPlay, playlists, onAddToPlaylist }
         <VideoCard
           key={video.id}
           video={video}
-          onPlay={onPlay}
-          playlists={playlists}
-          onAddToPlaylist={onAddToPlaylist}
+          onShowAddModal={onShowAddModal}
         />
       ))}
     </div>
