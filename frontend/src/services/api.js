@@ -1,0 +1,162 @@
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+const api = axios.create({
+  baseURL: `${API_BASE_URL}/api`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// ==================== User API ====================
+
+export const getUsers = async () => {
+  const response = await api.get('/users');
+  return response.data;
+};
+
+export const getUser = async (id) => {
+  const response = await api.get(`/users/${id}`);
+  return response.data;
+};
+
+// ==================== Category API ====================
+
+export const getCategories = async () => {
+  const response = await api.get('/categories');
+  return response.data;
+};
+
+// ==================== Video API ====================
+
+export const getVideos = async (categoryId = null, search = null) => {
+  const params = {};
+  if (categoryId) params.category_id = categoryId;
+  if (search) params.search = search;
+  const response = await api.get('/videos', { params });
+  return response.data;
+};
+
+export const getVideo = async (id) => {
+  const response = await api.get(`/videos/${id}`);
+  return response.data;
+};
+
+// ==================== Playlist API ====================
+
+export const getPlaylists = async (userId = null) => {
+  const params = userId ? { user_id: userId } : {};
+  const response = await api.get('/playlists', { params });
+  return response.data;
+};
+
+export const getPlaylist = async (id) => {
+  const response = await api.get(`/playlists/${id}`);
+  return response.data;
+};
+
+export const createPlaylist = async (data) => {
+  // data should include: { name, user_id, description? }
+  const response = await api.post('/playlists', data);
+  return response.data;
+};
+
+export const updatePlaylist = async (id, data) => {
+  const response = await api.put(`/playlists/${id}`, data);
+  return response.data;
+};
+
+export const deletePlaylist = async (id) => {
+  const response = await api.delete(`/playlists/${id}`);
+  return response.data;
+};
+
+export const addVideoToPlaylist = async (playlistId, videoId) => {
+  const response = await api.post(`/playlists/${playlistId}/videos`, { video_id: videoId });
+  return response.data;
+};
+
+export const removeVideoFromPlaylist = async (playlistId, videoId) => {
+  const response = await api.delete(`/playlists/${playlistId}/videos/${videoId}`);
+  return response.data;
+};
+
+export const reorderPlaylistVideos = async (playlistId, videoIds) => {
+  const response = await api.put(`/playlists/${playlistId}/reorder`, { video_ids: videoIds });
+  return response.data;
+};
+
+// ==================== Live Session API ====================
+
+// Get all currently live playlists
+export const getLivePlaylists = async () => {
+  const response = await api.get('/playlists/live');
+  return response.data;
+};
+
+// Start a live session for a playlist
+export const goLivePlaylist = async (playlistId) => {
+  const response = await api.post(`/playlists/${playlistId}/go-live`);
+  return response.data;
+};
+
+// Stop a live session
+export const stopLivePlaylist = async (hostCode) => {
+  const response = await api.post(`/playlists/${hostCode}/stop-live`);
+  return response.data;
+};
+
+// Join a live playlist as guest
+export const joinLivePlaylist = async (shareCode) => {
+  const response = await api.get(`/playlists/join/${shareCode}`);
+  return response.data;
+};
+
+// Join a live playlist as host
+export const joinLivePlaylistAsHost = async (hostCode) => {
+  const response = await api.get(`/playlists/host/${hostCode}`);
+  return response.data;
+};
+
+// Host: Sync state to all participants
+export const syncPlaylistState = async (hostCode, state) => {
+  const response = await api.post(`/playlists/${hostCode}/sync`, state);
+  return response.data;
+};
+
+// Host: Approve a song from the queue
+export const approveQueueItem = async (hostCode, queueIndex) => {
+  const response = await api.post(`/playlists/${hostCode}/approve`, { queue_index: queueIndex });
+  return response.data;
+};
+
+// Guest: Request a song
+export const queueSongToPlaylist = async (shareCode, videoId) => {
+  const response = await api.post(`/playlists/${shareCode}/queue`, { video_id: videoId });
+  return response.data;
+};
+
+// Guest: Like a video
+export const likeVideoInPlaylist = async (shareCode, videoId) => {
+  const response = await api.post(`/playlists/${shareCode}/like`, { video_id: videoId });
+  return response.data;
+};
+
+// ==================== YouTube API ====================
+
+export const searchYouTube = async (query) => {
+  const response = await api.get('/youtube/search', { params: { q: query } });
+  return response.data;
+};
+
+export const importYouTubeVideo = async (video) => {
+  const response = await api.post('/youtube/import', {
+    youtube_id: video.youtube_id,
+    title: video.title,
+    thumbnail_url: video.thumbnail_url,
+  });
+  return response.data;
+};
+
+export default api;

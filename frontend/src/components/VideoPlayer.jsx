@@ -1,0 +1,144 @@
+import YouTube from 'react-youtube';
+import { useRef, useEffect, useState } from 'react';
+import WaveVisualizer from './WaveVisualizer';
+
+export default function VideoPlayer({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, frequencyData, onStateUpdate }) {
+  const playerRef = useRef(null);
+  const intervalRef = useRef(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    if (playerRef.current) {
+      playerRef.current.setVolume(volume);
+    }
+  }, [volume]);
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  const startTimeTracking = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+
+    intervalRef.current = setInterval(() => {
+      if (playerRef.current) {
+        const time = playerRef.current.getCurrentTime() || 0;
+        const dur = playerRef.current.getDuration() || 0;
+        setCurrentTime(time);
+        setDuration(dur);
+
+        if (onTimeUpdate && dur > 0) {
+          onTimeUpdate(playerNumber, time, dur);
+        }
+      }
+    }, 500);
+  };
+
+  const opts = {
+    width: '100%',
+    height: '100%',
+    host: 'https://www.youtube-nocookie.com',
+    playerVars: {
+      autoplay: 1,
+      controls: 1,
+      modestbranding: 1,
+      rel: 0,
+      enablejsapi: 1,
+      playsinline: 1,
+      origin: window.location.origin,
+    },
+  };
+
+  const onReady = (event) => {
+    playerRef.current = event.target;
+    event.target.setVolume(volume);
+    startTimeTracking();
+  };
+
+  const onStateChange = (event) => {
+    // YT.PlayerState: ENDED=0, PLAYING=1, PAUSED=2, BUFFERING=3, CUED=5
+    if (event.data === 1) {
+      setIsPlaying(true);
+      startTimeTracking();
+      onStateUpdate?.(playerNumber, 'playing');
+    } else if (event.data === 0) {
+      setIsPlaying(false);
+      onStateUpdate?.(playerNumber, 'ended');
+      if (onEnded) {
+        onEnded(playerNumber);
+      }
+    } else if (event.data === 2) {
+      setIsPlaying(false);
+      onStateUpdate?.(playerNumber, 'paused');
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const borderColor = playerNumber === 1 ? 'border-purple-500' : 'border-pink-500';
+  const glowColor = playerNumber === 1 ? 'shadow-purple-500/30' : 'shadow-pink-500/30';
+  const labelBg = playerNumber === 1 ? 'bg-purple-600' : 'bg-pink-600';
+
+  return (
+    <div className={`relative rounded-xl overflow-hidden border-2 ${borderColor} ${isActive ? `shadow-lg ${glowColor}` : ''} transition-all duration-300`}>
+      <div className={`absolute top-2 left-2 z-10 px-3 py-1 ${labelBg} rounded-full text-xs font-bold text-white`}>
+        Player {playerNumber}
+      </div>
+
+      {video && duration > 0 && (
+        <div className="absolute top-2 right-2 z-10 px-2 py-1 bg-black/70 rounded text-xs text-white font-mono">
+          {formatTime(currentTime)} / {formatTime(duration)}
+        </div>
+      )}
+
+      <div className="aspect-video bg-black/50">
+        {video ? (
+          <YouTube
+            videoId={video.youtube_id}
+            opts={opts}
+            onReady={onReady}
+            onStateChange={onStateChange}
+            className="w-full h-full"
+            iframeClassName="w-full h-full"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-purple-300">
+            <div className="text-center">
+              <div className="text-4xl mb-2">🎵</div>
+              <p>Select a video to play</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {video && (
+        <div className="absolute bottom-16 left-0 right-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
+          <p className="text-white font-medium text-sm truncate">{video.title}</p>
+          {duration > 0 && (
+            <div className="mt-1 h-1 bg-white/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+                style={{ width: `${(currentTime / duration) * 100}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Wave Visualizer */}
+      <WaveVisualizer isActive={isPlaying && isActive} playerNumber={playerNumber} frequencyData={frequencyData} />
+    </div>
+  );
+}
