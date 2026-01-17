@@ -503,6 +503,30 @@ function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const handleLogout = () => {
+    // Clear all player state
+    setPlayer1Video(null);
+    setPlayer2Video(null);
+    setAutoPlayEnabled(false);
+    setIsAutoFading(false);
+    setActivePlaylist(null);
+    setPlaylistMode(false);
+    setSelectedPlaylist(null);
+    setCrossfadeValue(50);
+
+    // Clear any running intervals
+    if (autoFadeIntervalRef.current) {
+      clearInterval(autoFadeIntervalRef.current);
+      autoFadeIntervalRef.current = null;
+    }
+
+    // Clear saved playback state
+    localStorage.removeItem('barmania_playback_state');
+
+    // Call the actual logout
+    logout();
+  };
+
   const handlePlayPlaylist = useCallback(async (playlist) => {
     // Set as selected playlist to show content
     setSelectedPlaylist(playlist);
@@ -1565,9 +1589,9 @@ function App() {
                   </div>
                   <span className="text-white text-sm hidden md:inline">{currentUser.name}</span>
                   <button
-                    onClick={logout}
+                    onClick={handleLogout}
                     className="p-1.5 text-purple-300/60 hover:text-white hover:bg-white/10 rounded transition-colors"
-                    title="Switch user"
+                    title="Logout"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
