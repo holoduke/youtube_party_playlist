@@ -14,6 +14,12 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
   const loadedVideoIdRef = useRef(null);
   // Track the initial video ID for the YouTube component (stable after first set)
   const initialVideoIdRef = useRef(null);
+  // Track autoStart value for when player becomes ready
+  const autoStartRef = useRef(autoStart);
+  // Keep ref updated until player is ready (to catch late state updates)
+  if (!isPlayerReady) {
+    autoStartRef.current = autoStart;
+  }
 
   // Reset drag over state when overlay is hidden
   useEffect(() => {
@@ -109,6 +115,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       }
     },
     pause: () => {
+      console.log(`[Player ${playerNumber}] pause() called, playerRef:`, playerRef.current);
       if (playerRef.current) {
         playerRef.current.pauseVideo();
       }
@@ -168,13 +175,13 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     }
   }, [video?.youtube_id, isPlayerReady, autoStart, loadVideoInternal, stopTimeTracking]);
 
-  // Stable opts - never changes after mount
+  // Stable opts - never changes after mount (autoplay disabled, we control via API)
   const opts = useMemo(() => ({
     width: '100%',
     height: '100%',
     host: 'https://www.youtube-nocookie.com',
     playerVars: {
-      autoplay: 1, // Initial autoplay, subsequent loads controlled via API
+      autoplay: 0, // Never autoplay on mount - we control playback via API
       controls: 1,
       modestbranding: 1,
       rel: 0,
@@ -190,6 +197,11 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     // Use the ref to ensure we get the latest volume value
     event.target.setVolume(pendingVolumeRef.current);
     startTimeTracking();
+
+    // Only auto-start on initial load if autoStart is true
+    if (autoStartRef.current) {
+      event.target.playVideo();
+    }
   }, [startTimeTracking]);
 
   const onStateChange = useCallback((event) => {
@@ -233,7 +245,8 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
 
   return (
     <div
-      className={`relative rounded-xl overflow-hidden border-2 ${borderColor} ${isActive ? `shadow-lg ${glowColor}` : ''} ${isDragOver ? 'ring-4 ring-green-500 scale-[1.02]' : ''} transition-all duration-300`}
+      className={`relative rounded-xl overflow-hidden border-2 ${borderColor} ${isActive ? `shadow-lg ${glowColor}` : ''} ${isDragOver ? 'ring-4 ring-green-500 scale-[1.02]' : ''} transition-all duration-300 max-w-full`}
+      style={{ contain: 'layout' }}
     >
       {/* Drop overlay - only rendered when dragging */}
       {showDropOverlay && (
@@ -279,16 +292,16 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
         </div>
       )}
 
-      <div className="aspect-video bg-black/50 relative">
+      <div className="aspect-video bg-black/50 relative overflow-hidden">
         {video ? (
-          <div className={`absolute inset-0 ${showDropOverlay ? 'pointer-events-none' : ''}`}>
+          <div className={`absolute inset-0 overflow-hidden ${showDropOverlay ? 'pointer-events-none' : ''}`}>
             <YouTube
               videoId={stableVideoId}
               opts={opts}
               onReady={onReady}
               onStateChange={onStateChange}
               className="w-full h-full"
-              iframeClassName="w-full h-full"
+              iframeClassName="w-full h-full absolute inset-0"
             />
           </div>
         ) : (

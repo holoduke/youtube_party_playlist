@@ -98,6 +98,7 @@ function App() {
   const [player1State, setPlayer1State] = useState({ playing: false, currentTime: 0, duration: 0 });
   const [player2State, setPlayer2State] = useState({ playing: false, currentTime: 0, duration: 0 });
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
+  const [autoQueueEnabled, setAutoQueueEnabled] = useState(true); // Auto-load next video after fade
   // Track which videos were restored (should not auto-start)
   const [restoredVideoIds, setRestoredVideoIds] = useState({ player1: null, player2: null });
   // Track drag over playlist tab for adding videos
@@ -604,6 +605,29 @@ function App() {
       if (selectedPlaylist?.id === viewingPlaylist.id) {
         setSelectedPlaylist(updated);
       }
+
+      // If auto-queue is enabled, reload the next video in the inactive player
+      if (autoQueueEnabled && updated.videos?.length > 0) {
+        const activePlayerNum = crossfadeValue < 50 ? 1 : 2;
+        const currentActiveVideo = activePlayerNum === 1 ? player1Video : player2Video;
+
+        // Find the active video's new position in the reordered list
+        const activeIndex = updated.videos.findIndex(v => v.id === currentActiveVideo?.id);
+
+        if (activeIndex >= 0 && activeIndex + 1 < updated.videos.length) {
+          const newNextVideo = updated.videos[activeIndex + 1];
+          console.log(`[Reorder] Loading new next video "${newNextVideo.title}" into Player ${activePlayerNum === 1 ? 2 : 1}`);
+
+          // Load into the inactive player (without autoplay)
+          if (activePlayerNum === 1) {
+            setPlayer2Video(newNextVideo);
+            setRestoredVideoIds(prev => ({ ...prev, player2: newNextVideo.youtube_id }));
+          } else {
+            setPlayer1Video(newNextVideo);
+            setRestoredVideoIds(prev => ({ ...prev, player1: newNextVideo.youtube_id }));
+          }
+        }
+      }
     } catch (error) {
       console.error('Failed to reorder playlist:', error);
       showNotification('Failed to reorder', 'error');
@@ -1036,11 +1060,61 @@ function App() {
         clearInterval(autoFadeIntervalRef.current);
         autoFadeIntervalRef.current = null;
         setIsAutoFading(false);
+
+        // Pause the player that was faded out
+        const finishedPlayerRef = fadingToPlayer2 ? player1Ref : player2Ref;
+        const finishedPlayer = fadingToPlayer2 ? 1 : 2;
+        console.log(`[Crossfade Complete] Faded to Player ${fadingToPlayer2 ? 2 : 1}, pausing Player ${finishedPlayer}`);
+        if (finishedPlayerRef.current) {
+          finishedPlayerRef.current.pause();
+        }
+
+        // Load next video if auto-queue is enabled
+        // Find the video that just started playing (the active player after fade)
+        const activePlayer = fadingToPlayer2 ? 2 : 1;
+        const nowPlayingVideo = fadingToPlayer2 ? player2Video : player1Video;
+        const nowPlayingIndex = autoPlayVideos.findIndex(v => v.id === nowPlayingVideo?.id);
+        const nextIndex = nowPlayingIndex + 1;
+
+        console.log('[Auto-Queue Check]', {
+          autoQueueEnabled,
+          playlistLength: autoPlayVideos.length,
+          activePlayer,
+          nowPlayingVideo: nowPlayingVideo?.title,
+          nowPlayingIndex,
+          nextIndex,
+          hasNextVideo: nextIndex >= 0 && nextIndex < autoPlayVideos.length
+        });
+
+        if (autoQueueEnabled && autoPlayVideos.length > 0 && nowPlayingIndex >= 0) {
+          if (nextIndex < autoPlayVideos.length) {
+            console.log(`[Auto-Queue] Will load video at index ${nextIndex} into Player ${finishedPlayer} after 1s delay`);
+            if (loadNextVideoTimeoutRef.current) {
+              clearTimeout(loadNextVideoTimeoutRef.current);
+            }
+            loadNextVideoTimeoutRef.current = setTimeout(() => {
+              loadNextVideoTimeoutRef.current = null;
+              const nextVideo = autoPlayVideos[nextIndex];
+              console.log(`[Auto-Queue] Loading "${nextVideo?.title}" into Player ${finishedPlayer}`);
+              if (finishedPlayer === 1) {
+                setPlayer1Video(nextVideo);
+                setRestoredVideoIds(prev => ({ ...prev, player1: nextVideo.youtube_id }));
+              } else {
+                setPlayer2Video(nextVideo);
+                setRestoredVideoIds(prev => ({ ...prev, player2: nextVideo.youtube_id }));
+              }
+            }, 1000);
+          } else {
+            console.log('[Auto-Queue] No more videos in playlist');
+          }
+        } else {
+          console.log('[Auto-Queue] Skipped -', !autoQueueEnabled ? 'auto-queue disabled' : nowPlayingIndex < 0 ? 'playing video not in playlist' : 'playlist empty');
+        }
       } else {
         setCrossfadeValue(newValue);
       }
     }, 200);
-  }, [isAutoFading, crossfadeValue]);
+  }, [isAutoFading, crossfadeValue, autoQueueEnabled, autoPlayVideos, player1Video, player2Video]);
 
   // Save playback state to localStorage when it changes
   useEffect(() => {
@@ -1128,41 +1202,46 @@ function App() {
             }));
           }
 
-          // Load next song on the finished player after 2 seconds
-          const nextIndex = autoPlayIndex + 2;
+          // Load next song on the finished player after 1 second (if auto-queue enabled)
+          if (autoQueueEnabled) {
+            const nextIndex = autoPlayIndex + 2;
 
-          if (nextIndex < autoPlayVideos.length) {
-            // Clear any pending load timeout
-            if (loadNextVideoTimeoutRef.current) {
-              clearTimeout(loadNextVideoTimeoutRef.current);
-            }
-            loadNextVideoTimeoutRef.current = setTimeout(() => {
-              loadNextVideoTimeoutRef.current = null;
-              const nextVideo = autoPlayVideos[nextIndex];
-              if (finishedPlayer === 1) {
-                setPlayer1Video(nextVideo);
-                // Set restored ID to match so it doesn't auto-start
-                setRestoredVideoIds(prev => ({ ...prev, player1: nextVideo.youtube_id }));
-              } else {
-                setPlayer2Video(nextVideo);
-                // Set restored ID to match so it doesn't auto-start
-                setRestoredVideoIds(prev => ({ ...prev, player2: nextVideo.youtube_id }));
+            if (nextIndex < autoPlayVideos.length) {
+              // Clear any pending load timeout
+              if (loadNextVideoTimeoutRef.current) {
+                clearTimeout(loadNextVideoTimeoutRef.current);
               }
-            }, 2000);
-            setAutoPlayIndex(prev => prev + 1);
+              loadNextVideoTimeoutRef.current = setTimeout(() => {
+                loadNextVideoTimeoutRef.current = null;
+                const nextVideo = autoPlayVideos[nextIndex];
+                if (finishedPlayer === 1) {
+                  setPlayer1Video(nextVideo);
+                  setRestoredVideoIds(prev => ({ ...prev, player1: nextVideo.youtube_id }));
+                } else {
+                  setPlayer2Video(nextVideo);
+                  setRestoredVideoIds(prev => ({ ...prev, player2: nextVideo.youtube_id }));
+                }
+              }, 1000);
+              setAutoPlayIndex(prev => prev + 1);
+            }
           }
         } else {
           setCrossfadeValue(currentFade);
         }
       }, 500); // Update every 500ms
     }
-  }, [autoPlayEnabled, isAutoFading, crossfadeValue, player1State, player2State, autoPlayIndex, autoPlayVideos]);
+  }, [autoPlayEnabled, isAutoFading, crossfadeValue, player1State, player2State, autoPlayIndex, autoPlayVideos, autoQueueEnabled]);
 
   // Get the "active" player based on crossfade
   const activePlayer = crossfadeValue < 50 ? 1 : 2;
   const activeVideo = activePlayer === 1 ? player1Video : player2Video;
   const activePlayerState = activePlayer === 1 ? player1State : player2State;
-  const nextVideo = activePlayer === 1 ? player2Video : player1Video;
+
+  // Next video is the one after the currently active video in the playlist
+  const activeVideoIndex = autoPlayVideos.findIndex(v => v.id === activeVideo?.id);
+  const nextVideo = activeVideoIndex >= 0 && activeVideoIndex + 1 < autoPlayVideos.length
+    ? autoPlayVideos[activeVideoIndex + 1]
+    : null;
 
   return (
     <div className="min-h-screen">
@@ -1900,6 +1979,17 @@ function App() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                         </svg>
                       </button>
+                      <button
+                        onClick={() => setAutoQueueEnabled(prev => !prev)}
+                        className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors font-bold text-sm ${
+                          autoQueueEnabled
+                            ? 'bg-green-500/30 text-green-300 hover:bg-green-500/50'
+                            : 'bg-white/10 text-white/50 hover:bg-white/20'
+                        }`}
+                        title={autoQueueEnabled ? 'Auto-queue ON: Next video loads after fade' : 'Auto-queue OFF: Manual loading only'}
+                      >
+                        A
+                      </button>
                     </div>
                   </div>
 
@@ -1930,7 +2020,7 @@ function App() {
 
               {/* Player 1 with volume indicator */}
               <div className="flex gap-2">
-                <div className="flex-1">
+                <div className="flex-1 min-w-0 overflow-hidden">
                   <VideoPlayer
                     ref={player1Ref}
                     video={player1Video}
@@ -1958,7 +2048,7 @@ function App() {
 
               {/* Player 2 with volume indicator */}
               <div className="flex gap-2">
-                <div className="flex-1">
+                <div className="flex-1 min-w-0 overflow-hidden">
                   <VideoPlayer
                     ref={player2Ref}
                     video={player2Video}
@@ -2216,6 +2306,7 @@ function App() {
                   videos={displayVideos}
                   onReorder={handleReorderPlaylist}
                   onRemove={(videoId) => handleRemoveFromPlaylist(videoId, viewingPlaylist.id)}
+                  activeVideoId={activeVideo?.id}
                   onPlay={(video, index) => {
                     // Play in current active player
                     const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;

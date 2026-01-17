@@ -1,6 +1,14 @@
 import { useState } from 'react';
 
-export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay }) {
+// Format duration from seconds to MM:SS
+const formatDuration = (seconds) => {
+  if (!seconds) return '--:--';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay, activeVideoId }) {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -91,82 +99,141 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay 
         </div>
       )}
 
-      {/* Video List */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-4">
-        {videos.map((video, index) => (
-          <div
-            key={video.id}
-            draggable="true"
-            onDragStart={(e) => handleDragStart(e, index)}
-            onDragEnd={handleDragEnd}
-            onDragOver={(e) => handleDragOver(e, index)}
-            onDrop={(e) => handleDrop(e, index)}
-            className={`group relative bg-white/5 backdrop-blur-md rounded-xl overflow-hidden border transition-all duration-200 cursor-grab active:cursor-grabbing select-none ${
-              draggedIndex === index
-                ? 'opacity-50 scale-95 border-purple-500'
-                : dragOverIndex === index
-                ? 'border-pink-500 scale-105 shadow-lg shadow-pink-500/20'
-                : 'border-white/10 hover:border-purple-500/50 hover:scale-[1.02] hover:shadow-xl hover:shadow-purple-500/20'
-            }`}
-          >
-            {/* Position Badge */}
-            <div className="absolute top-2 left-2 z-10 w-6 h-6 bg-black/70 rounded-full flex items-center justify-center text-xs font-bold text-white">
-              {index + 1}
-            </div>
+      {/* Video List - Row Layout */}
+      <div className="flex flex-col gap-2 p-4">
+        {videos.map((video, index) => {
+          const isActive = video.id === activeVideoId;
 
-            <div className="relative aspect-video overflow-hidden bg-gray-800">
-              <img
-                src={video.thumbnail_url || `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`}
-                alt={video.title}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                loading="lazy"
-                draggable="false"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          return (
+            <div
+              key={video.id}
+              draggable="true"
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragEnd={handleDragEnd}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDrop={(e) => handleDrop(e, index)}
+              className={`group relative flex items-center gap-4 p-2 rounded-xl border transition-all duration-200 cursor-grab active:cursor-grabbing select-none ${
+                draggedIndex === index
+                  ? 'opacity-50 scale-[0.98] border-purple-500 bg-purple-500/10'
+                  : dragOverIndex === index
+                  ? 'border-pink-500 bg-pink-500/10 shadow-lg shadow-pink-500/20'
+                  : isActive
+                  ? 'border-green-500 bg-gradient-to-r from-green-500/20 to-emerald-500/10 shadow-lg shadow-green-500/20'
+                  : 'border-white/10 bg-white/5 hover:border-purple-500/50 hover:bg-white/10'
+              }`}
+            >
+              {/* Position Number */}
+              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                isActive
+                  ? 'bg-green-500 text-white'
+                  : 'bg-white/10 text-white/60'
+              }`}>
+                {isActive ? (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                ) : (
+                  index + 1
+                )}
+              </div>
 
-              {/* Play button */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              {/* Thumbnail */}
+              <div className="relative flex-shrink-0 w-24 h-14 rounded-lg overflow-hidden bg-gray-800">
+                <img
+                  src={video.thumbnail_url || `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`}
+                  alt={video.title}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  draggable="false"
+                />
+                {isActive && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                    <div className="flex gap-0.5">
+                      <span className="w-1 h-4 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-1 h-3 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-1 h-5 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }}></span>
+                      <span className="w-1 h-3 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: '450ms' }}></span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Video Info */}
+              <div className="flex-1 min-w-0">
+                <h3 className={`font-medium truncate ${isActive ? 'text-green-300' : 'text-white'}`} title={video.title}>
+                  {video.title}
+                </h3>
+                <div className="flex items-center gap-3 mt-1 text-xs text-white/50">
+                  {video.duration && (
+                    <span className="flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {formatDuration(video.duration)}
+                    </span>
+                  )}
+                  {video.artist && (
+                    <span className="flex items-center gap-1 truncate">
+                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {video.artist}
+                    </span>
+                  )}
+                  {video.categories?.length > 0 && (
+                    <div className="flex gap-1 flex-wrap">
+                      {video.categories.slice(0, 2).map((cat) => (
+                        <span
+                          key={cat.id}
+                          className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px]"
+                        >
+                          {cat.name}
+                        </span>
+                      ))}
+                      {video.categories.length > 2 && (
+                        <span className="text-purple-300/60">+{video.categories.length - 2}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Play button */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onPlay(video, index);
                   }}
-                  className="p-3 bg-black/60 hover:bg-green-600 text-white rounded-full transition-colors"
-                  title="Play"
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    isActive
+                      ? 'bg-green-500/20 text-green-300 cursor-default'
+                      : 'bg-white/10 text-white/60 hover:bg-green-500 hover:text-white hover:scale-110'
+                  }`}
+                  title={isActive ? 'Now playing' : 'Play'}
+                  disabled={isActive}
                 >
-                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
                   </svg>
                 </button>
-              </div>
 
-              {/* Drag handle indicator */}
-              <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="p-1.5 bg-black/60 rounded text-white/60">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {/* Drag handle */}
+                <div className="p-2 text-white/30 group-hover:text-white/60 transition-colors">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                   </svg>
                 </div>
               </div>
-            </div>
 
-            <div className="p-3">
-              <h3 className="text-sm font-medium text-white truncate" title={video.title}>
-                {video.title}
-              </h3>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {video.categories?.map((cat) => (
-                  <span
-                    key={cat.id}
-                    className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded"
-                  >
-                    {cat.name}
-                  </span>
-                ))}
-              </div>
+              {/* Now Playing indicator */}
+              {isActive && (
+                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-1 h-8 bg-green-500 rounded-full"></div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
