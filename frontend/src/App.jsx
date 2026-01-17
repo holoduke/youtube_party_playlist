@@ -1240,7 +1240,7 @@ function App() {
               {/* QR Code */}
               <div className="bg-white p-4 rounded-2xl inline-block mb-4">
                 <QRCodeSVG
-                  value={`${window.location.origin}/?playlist=${selectedPlaylist.id}`}
+                  value={`${window.location.origin}/playlist/${selectedPlaylist.id}`}
                   size={180}
                   level="H"
                   includeMargin={false}
@@ -1251,7 +1251,7 @@ function App() {
               <div className="bg-black/30 rounded-xl p-3 mb-4">
                 <p className="text-purple-300/60 text-xs mb-1 uppercase tracking-wide">Share this URL</p>
                 <p className="text-white font-mono text-sm break-all select-all">
-                  {`${window.location.origin}/?playlist=${selectedPlaylist.id}`}
+                  {`${window.location.origin}/playlist/${selectedPlaylist.id}`}
                 </p>
               </div>
 
@@ -1259,7 +1259,7 @@ function App() {
               <div className="flex gap-3">
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/?playlist=${selectedPlaylist.id}`);
+                    navigator.clipboard.writeText(`${window.location.origin}/playlist/${selectedPlaylist.id}`);
                     showNotification('URL copied to clipboard!');
                   }}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
