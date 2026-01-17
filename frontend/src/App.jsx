@@ -788,6 +788,16 @@ function App() {
     }
   };
 
+  // Toggle the active player (based on crossfade position)
+  const toggleActivePlayer = () => {
+    const isPlayer1Active = crossfadeValue < 50;
+    if (isPlayer1Active) {
+      togglePlayer1();
+    } else {
+      togglePlayer2();
+    }
+  };
+
   // Format time helper
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
@@ -1677,48 +1687,26 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Play/Pause Controls */}
+                    {/* Play/Pause & Crossfade Controls */}
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={togglePlayer1}
-                        disabled={!player1Video}
+                        onClick={toggleActivePlayer}
+                        disabled={!activeVideo}
                         className={`p-2 rounded-lg transition-colors ${
-                          player1Video
-                            ? player1State.playing
+                          activeVideo
+                            ? activePlayerState.playing
                               ? 'bg-purple-500 text-white'
                               : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
                             : 'bg-white/5 text-white/30 cursor-not-allowed'
                         }`}
-                        title={`${player1State.playing ? 'Pause' : 'Play'} Player 1`}
+                        title={activePlayerState.playing ? 'Pause' : 'Play'}
                       >
-                        {player1State.playing ? (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {activePlayerState.playing ? (
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
                           </svg>
                         ) : (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                          </svg>
-                        )}
-                      </button>
-                      <button
-                        onClick={togglePlayer2}
-                        disabled={!player2Video}
-                        className={`p-2 rounded-lg transition-colors ${
-                          player2Video
-                            ? player2State.playing
-                              ? 'bg-pink-500 text-white'
-                              : 'bg-pink-500/30 text-pink-300 hover:bg-pink-500/50'
-                            : 'bg-white/5 text-white/30 cursor-not-allowed'
-                        }`}
-                        title={`${player2State.playing ? 'Pause' : 'Play'} Player 2`}
-                      >
-                        {player2State.playing ? (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                           </svg>
                         )}
