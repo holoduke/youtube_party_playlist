@@ -1837,6 +1837,10 @@ function App() {
                     value={youtubeSearchQuery}
                     onChange={(e) => handleYoutubeSearchInput(e.target.value)}
                     onFocus={() => youtubeSearchResults.length > 0 && setShowYoutubeDropdown(true)}
+                    onBlur={(e) => {
+                      // Delay to allow click on dropdown items
+                      setTimeout(() => setShowYoutubeDropdown(false), 200);
+                    }}
                     placeholder="Search YouTube..."
                     className="w-full pl-10 pr-10 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-red-300/50 focus:outline-none focus:border-red-500 text-sm"
                   />
@@ -1957,7 +1961,7 @@ function App() {
                 {/* Click outside to close dropdown */}
                 {showYoutubeDropdown && (
                   <div
-                    className="fixed inset-0 z-40"
+                    className="fixed inset-0 z-[99]"
                     onClick={() => setShowYoutubeDropdown(false)}
                   />
                 )}

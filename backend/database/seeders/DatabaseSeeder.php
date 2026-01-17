@@ -12,10 +12,10 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // Hardcoded users for simple user selection
+        // Hardcoded users for simple user selection (username:password)
         $users = [
-            ['name' => 'Arjan', 'email' => 'arjan@barmania.local', 'password' => bcrypt('password')],
-            ['name' => 'Gillis', 'email' => 'gillis@barmania.local', 'password' => bcrypt('password')],
+            ['name' => 'Arjan', 'email' => 'arjan@barmania.local', 'password' => bcrypt('arjan')],
+            ['name' => 'Gillis', 'email' => 'gillis@barmania.local', 'password' => bcrypt('gillis')],
         ];
 
         foreach ($users as $userData) {
