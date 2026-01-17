@@ -1,13 +1,31 @@
 import YouTube from 'react-youtube';
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import WaveVisualizer from './WaveVisualizer';
 
-export default function VideoPlayer({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, frequencyData, onStateUpdate }) {
+const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, frequencyData, onStateUpdate }, ref) => {
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Expose control methods to parent
+  useImperativeHandle(ref, () => ({
+    play: () => {
+      if (playerRef.current) {
+        playerRef.current.playVideo();
+      }
+    },
+    pause: () => {
+      if (playerRef.current) {
+        playerRef.current.pauseVideo();
+      }
+    },
+    isPlaying: () => isPlaying,
+    getCurrentTime: () => currentTime,
+    getDuration: () => duration,
+    getRemainingTime: () => Math.max(0, duration - currentTime),
+  }));
 
   useEffect(() => {
     if (playerRef.current) {
@@ -22,6 +40,13 @@ export default function VideoPlayer({ video, volume, playerNumber, isActive, onT
       }
     };
   }, []);
+
+  // Reset state when video changes
+  useEffect(() => {
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
+  }, [video?.youtube_id]);
 
   const startTimeTracking = () => {
     if (intervalRef.current) {
@@ -68,16 +93,16 @@ export default function VideoPlayer({ video, volume, playerNumber, isActive, onT
     if (event.data === 1) {
       setIsPlaying(true);
       startTimeTracking();
-      onStateUpdate?.(playerNumber, 'playing');
+      onStateUpdate?.(playerNumber, 'playing', { currentTime, duration });
     } else if (event.data === 0) {
       setIsPlaying(false);
-      onStateUpdate?.(playerNumber, 'ended');
+      onStateUpdate?.(playerNumber, 'ended', { currentTime, duration });
       if (onEnded) {
         onEnded(playerNumber);
       }
     } else if (event.data === 2) {
       setIsPlaying(false);
-      onStateUpdate?.(playerNumber, 'paused');
+      onStateUpdate?.(playerNumber, 'paused', { currentTime, duration });
     }
   };
 
@@ -93,8 +118,11 @@ export default function VideoPlayer({ video, volume, playerNumber, isActive, onT
 
   return (
     <div className={`relative rounded-xl overflow-hidden border-2 ${borderColor} ${isActive ? `shadow-lg ${glowColor}` : ''} transition-all duration-300`}>
-      <div className={`absolute top-2 left-2 z-10 px-3 py-1 ${labelBg} rounded-full text-xs font-bold text-white`}>
-        Player {playerNumber}
+      <div className={`absolute top-2 left-2 z-10 px-3 py-1 ${labelBg} rounded-full text-xs font-bold text-white flex items-center gap-1.5`}>
+        <span>Player {playerNumber}</span>
+        {isPlaying && (
+          <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+        )}
       </div>
 
       {video && duration > 0 && (
@@ -141,4 +169,8 @@ export default function VideoPlayer({ video, volume, playerNumber, isActive, onT
       <WaveVisualizer isActive={isPlaying && isActive} playerNumber={playerNumber} frequencyData={frequencyData} />
     </div>
   );
-}
+});
+
+VideoPlayer.displayName = 'VideoPlayer';
+
+export default VideoPlayer;

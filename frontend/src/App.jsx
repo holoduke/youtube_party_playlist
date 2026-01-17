@@ -62,6 +62,12 @@ function App() {
   const [importingVideoId, setImportingVideoId] = useState(null);
   const youtubeSearchTimeoutRef = useRef(null);
 
+  // Player refs and state
+  const player1Ref = useRef(null);
+  const player2Ref = useRef(null);
+  const [player1State, setPlayer1State] = useState({ playing: false, currentTime: 0, duration: 0 });
+  const [player2State, setPlayer2State] = useState({ playing: false, currentTime: 0, duration: 0 });
+
   // Get the remote URL for QR code
   const getRemoteUrl = () => {
     const host = window.location.hostname;
@@ -534,9 +540,18 @@ function App() {
     ? viewingPlaylist.videos || []
     : videos;
 
-  // Handler for player state updates from DualPlayer
-  const handlePlayerStateUpdate = useCallback((playerNumber, state) => {
+  // Handler for player state updates
+  const handlePlayerStateUpdate = useCallback((playerNumber, state, timeInfo) => {
     playerStatesRef.current[`player${playerNumber}State`] = state;
+
+    // Update player state for UI
+    const isPlaying = state === 'playing';
+    if (playerNumber === 1) {
+      setPlayer1State(prev => ({ ...prev, playing: isPlaying }));
+    } else {
+      setPlayer2State(prev => ({ ...prev, playing: isPlaying }));
+    }
+
     if (syncEnabled) {
       broadcastState({
         player1Video,
@@ -547,6 +562,50 @@ function App() {
       });
     }
   }, [player1Video, player2Video, crossfadeValue, syncEnabled]);
+
+  // Handler for time updates from players
+  const handleTimeUpdate = useCallback((playerNumber, currentTime, duration) => {
+    if (playerNumber === 1) {
+      setPlayer1State(prev => ({ ...prev, currentTime, duration }));
+    } else {
+      setPlayer2State(prev => ({ ...prev, currentTime, duration }));
+    }
+  }, []);
+
+  // Player control functions
+  const togglePlayer1 = () => {
+    if (player1Ref.current) {
+      if (player1State.playing) {
+        player1Ref.current.pause();
+      } else {
+        player1Ref.current.play();
+      }
+    }
+  };
+
+  const togglePlayer2 = () => {
+    if (player2Ref.current) {
+      if (player2State.playing) {
+        player2Ref.current.pause();
+      } else {
+        player2Ref.current.play();
+      }
+    }
+  };
+
+  // Format time helper
+  const formatTime = (seconds) => {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Get the "active" player based on crossfade
+  const activePlayer = crossfadeValue < 50 ? 1 : 2;
+  const activeVideo = activePlayer === 1 ? player1Video : player2Video;
+  const activePlayerState = activePlayer === 1 ? player1State : player2State;
+  const nextVideo = activePlayer === 1 ? player2Video : player1Video;
 
   return (
     <div className="min-h-screen">
@@ -955,24 +1014,136 @@ function App() {
                 )}
               </div>
 
+              {/* Player Controls Panel */}
+              <div className="bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 p-3">
+                {/* Now Playing Info */}
+                <div className="flex items-center gap-3 mb-3">
+                  {/* Thumbnail */}
+                  {activeVideo ? (
+                    <div className="relative w-16 h-10 rounded-lg overflow-hidden bg-black/50 flex-shrink-0">
+                      <img
+                        src={activeVideo.thumbnail_url}
+                        alt={activeVideo.title}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className={`absolute inset-0 border-2 rounded-lg ${activePlayer === 1 ? 'border-purple-500' : 'border-pink-500'}`} />
+                    </div>
+                  ) : (
+                    <div className="w-16 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
+                      <span className="text-purple-300/50 text-xs">No video</span>
+                    </div>
+                  )}
+
+                  {/* Song Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium truncate">
+                      {activeVideo ? activeVideo.title : 'No video playing'}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-purple-300/60">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${activePlayer === 1 ? 'bg-purple-500/30 text-purple-300' : 'bg-pink-500/30 text-pink-300'}`}>
+                        P{activePlayer}
+                      </span>
+                      {activePlayerState.duration > 0 && (
+                        <>
+                          <span>{formatTime(activePlayerState.currentTime)}</span>
+                          <span>/</span>
+                          <span>{formatTime(activePlayerState.duration)}</span>
+                          <span className="text-purple-300/40">
+                            (-{formatTime(activePlayerState.duration - activePlayerState.currentTime)})
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Play/Pause Controls */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={togglePlayer1}
+                      disabled={!player1Video}
+                      className={`p-2 rounded-lg transition-colors ${
+                        player1Video
+                          ? player1State.playing
+                            ? 'bg-purple-500 text-white'
+                            : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
+                          : 'bg-white/5 text-white/30 cursor-not-allowed'
+                      }`}
+                      title={`${player1State.playing ? 'Pause' : 'Play'} Player 1`}
+                    >
+                      {player1State.playing ? (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={togglePlayer2}
+                      disabled={!player2Video}
+                      className={`p-2 rounded-lg transition-colors ${
+                        player2Video
+                          ? player2State.playing
+                            ? 'bg-pink-500 text-white'
+                            : 'bg-pink-500/30 text-pink-300 hover:bg-pink-500/50'
+                          : 'bg-white/5 text-white/30 cursor-not-allowed'
+                      }`}
+                      title={`${player2State.playing ? 'Pause' : 'Play'} Player 2`}
+                    >
+                      {player2State.playing ? (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Next Up */}
+                {nextVideo && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-white/10">
+                    <span className="text-purple-300/50 text-xs">Next:</span>
+                    <div className="w-8 h-5 rounded overflow-hidden bg-black/50 flex-shrink-0">
+                      <img
+                        src={nextVideo.thumbnail_url}
+                        alt={nextVideo.title}
+                        className="w-full h-full object-cover opacity-60"
+                      />
+                    </div>
+                    <p className="text-purple-300/70 text-xs truncate flex-1">{nextVideo.title}</p>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${activePlayer === 1 ? 'bg-pink-500/20 text-pink-300/70' : 'bg-purple-500/20 text-purple-300/70'}`}>
+                      P{activePlayer === 1 ? 2 : 1}
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Player 1 */}
               <VideoPlayer
+                ref={player1Ref}
                 video={player1Video}
                 volume={100 - crossfadeValue}
                 playerNumber={1}
                 isActive={crossfadeValue < 50}
-                onTimeUpdate={() => {}}
+                onTimeUpdate={handleTimeUpdate}
                 onEnded={handlePlaylistVideoEnded}
                 onStateUpdate={handlePlayerStateUpdate}
               />
 
               {/* Player 2 */}
               <VideoPlayer
+                ref={player2Ref}
                 video={player2Video}
                 volume={crossfadeValue}
                 playerNumber={2}
                 isActive={crossfadeValue >= 50}
-                onTimeUpdate={() => {}}
+                onTimeUpdate={handleTimeUpdate}
                 onEnded={handlePlaylistVideoEnded}
                 onStateUpdate={handlePlayerStateUpdate}
               />
