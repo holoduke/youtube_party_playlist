@@ -1,10 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import YouTube from 'react-youtube';
-import { getPlaylist } from '../services/api';
+import { getPlaylist, getPlaylistByHash } from '../services/api';
 
 export default function PublicPlaylistPage() {
-  const { playlistId } = useParams();
+  const { playlistId: routePlaylistId } = useParams();
+  const [searchParams] = useSearchParams();
+  // Support both ?pl= query param (new hash format) and /playlist/:id route param (legacy numeric)
+  const plHash = searchParams.get('pl');
+  // Use hash param if present, otherwise fall back to legacy route param
+  const playlistId = plHash || routePlaylistId;
+  const isHashLookup = !!plHash;
+
   const [playlist, setPlaylist] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,9 +21,18 @@ export default function PublicPlaylistPage() {
   const playerRef = useRef(null);
 
   useEffect(() => {
+    if (!playlistId) {
+      setError('No playlist specified');
+      setLoading(false);
+      return;
+    }
+
     const loadPlaylist = async () => {
       try {
-        const data = await getPlaylist(playlistId);
+        // Use hash lookup for ?pl= param, numeric lookup for legacy /playlist/:id route
+        const data = isHashLookup
+          ? await getPlaylistByHash(playlistId)
+          : await getPlaylist(playlistId);
         if (!data.is_public) {
           setError('This playlist is private');
           setLoading(false);
@@ -28,14 +44,14 @@ export default function PublicPlaylistPage() {
           setCurrentIndex(0);
         }
         setLoading(false);
-      } catch (err) {
+      } catch {
         setError('Playlist not found');
         setLoading(false);
       }
     };
 
     loadPlaylist();
-  }, [playlistId]);
+  }, [playlistId, isHashLookup]);
 
   const handleVideoSelect = (video, index) => {
     setCurrentVideo(video);

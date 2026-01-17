@@ -71,6 +71,11 @@ export const getPlaylist = async (id) => {
   return response.data;
 };
 
+export const getPlaylistByHash = async (hash) => {
+  const response = await api.get(`/playlists/hash/${hash}`);
+  return response.data;
+};
+
 export const createPlaylist = async (data) => {
   // data should include: { name, user_id, description?, is_public? }
   const response = await api.post('/playlists', data);
@@ -155,6 +160,32 @@ export const queueSongToPlaylist = async (shareCode, videoId) => {
 // Guest: Like a video
 export const likeVideoInPlaylist = async (shareCode, videoId) => {
   const response = await api.post(`/playlists/${shareCode}/like`, { video_id: videoId });
+  return response.data;
+};
+
+// ==================== Broadcast API ====================
+
+// Start broadcasting a playlist
+export const startBroadcast = async (playlistId) => {
+  const response = await api.post(`/playlists/${playlistId}/start-broadcast`);
+  return response.data;
+};
+
+// Stop broadcasting a playlist
+export const stopBroadcast = async (playlistId) => {
+  const response = await api.post(`/playlists/${playlistId}/stop-broadcast`);
+  return response.data;
+};
+
+// Sync broadcast state (DJ app calls this)
+export const syncBroadcastState = async (playlistId, state) => {
+  const response = await api.post(`/playlists/${playlistId}/broadcast-sync`, state);
+  return response.data;
+};
+
+// Get broadcast state (viewer polls this)
+export const getBroadcastState = async (hash) => {
+  const response = await api.get(`/broadcast/${hash}`);
   return response.data;
 };
 

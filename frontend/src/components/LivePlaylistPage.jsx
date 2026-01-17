@@ -30,7 +30,8 @@ export default function LivePlaylistPage() {
   const [player1Video, setPlayer1Video] = useState(null);
   const [player2Video, setPlayer2Video] = useState(null);
   const [crossfadeValue, setCrossfadeValue] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+  // isPlaying is tracked but intentionally used only for future feature (play/pause UI)
+  const [_isPlaying, setIsPlaying] = useState(false);
 
   // Queue and likes
   const [queue, setQueue] = useState([]);
@@ -48,6 +49,40 @@ export default function LivePlaylistPage() {
   const player1Ref = useRef(null);
   const player2Ref = useRef(null);
   const echoRef = useRef(null);
+  const isHostRef = useRef(false);
+
+  const setupWebSocket = useCallback((playlistShareCode) => {
+    const REVERB_KEY = import.meta.env.VITE_REVERB_APP_KEY || 'barmania-key';
+    const REVERB_HOST = import.meta.env.VITE_REVERB_HOST || window.location.hostname;
+    const REVERB_PORT = import.meta.env.VITE_REVERB_PORT || 8080;
+
+    window.Pusher = Pusher;
+
+    echoRef.current = new Echo({
+      broadcaster: 'reverb',
+      key: REVERB_KEY,
+      wsHost: REVERB_HOST,
+      wsPort: REVERB_PORT,
+      forceTLS: false,
+      enabledTransports: ['ws', 'wss'],
+    });
+
+    echoRef.current.channel(`playlist.${playlistShareCode}`).listen('PlaylistStateChanged', (data) => {
+      if (data.type === 'state' && !isHostRef.current) {
+        // Guests receive state updates
+        if (data.state.player1Video !== undefined) setPlayer1Video(data.state.player1Video);
+        if (data.state.player2Video !== undefined) setPlayer2Video(data.state.player2Video);
+        if (data.state.crossfadeValue !== undefined) setCrossfadeValue(data.state.crossfadeValue);
+        if (data.state.isPlaying !== undefined) setIsPlaying(data.state.isPlaying);
+      } else if (data.type === 'queue') {
+        setQueue(data.queue || []);
+      } else if (data.type === 'likes') {
+        setLikes(data.likes || {});
+      } else if (data.type === 'ended') {
+        setError('Live session has ended');
+      }
+    });
+  }, []);
 
   // Initialize playlist and WebSocket connection
   useEffect(() => {
@@ -57,6 +92,7 @@ export default function LivePlaylistPage() {
         if (hostCode) {
           data = await joinLivePlaylistAsHost(hostCode);
           setIsHost(true);
+          isHostRef.current = true;
         } else {
           data = await joinLivePlaylist(shareCode);
         }
@@ -82,7 +118,7 @@ export default function LivePlaylistPage() {
         setupWebSocket(data.playlist.share_code);
 
         setLoading(false);
-      } catch (err) {
+      } catch {
         setError('Playlist not found or session has ended');
         setLoading(false);
       }
@@ -95,40 +131,7 @@ export default function LivePlaylistPage() {
         echoRef.current.disconnect();
       }
     };
-  }, [shareCode, hostCode]);
-
-  const setupWebSocket = (playlistShareCode) => {
-    const REVERB_KEY = import.meta.env.VITE_REVERB_APP_KEY || 'barmania-key';
-    const REVERB_HOST = import.meta.env.VITE_REVERB_HOST || window.location.hostname;
-    const REVERB_PORT = import.meta.env.VITE_REVERB_PORT || 8080;
-
-    window.Pusher = Pusher;
-
-    echoRef.current = new Echo({
-      broadcaster: 'reverb',
-      key: REVERB_KEY,
-      wsHost: REVERB_HOST,
-      wsPort: REVERB_PORT,
-      forceTLS: false,
-      enabledTransports: ['ws', 'wss'],
-    });
-
-    echoRef.current.channel(`playlist.${playlistShareCode}`).listen('PlaylistStateChanged', (data) => {
-      if (data.type === 'state' && !isHost) {
-        // Guests receive state updates
-        if (data.state.player1Video !== undefined) setPlayer1Video(data.state.player1Video);
-        if (data.state.player2Video !== undefined) setPlayer2Video(data.state.player2Video);
-        if (data.state.crossfadeValue !== undefined) setCrossfadeValue(data.state.crossfadeValue);
-        if (data.state.isPlaying !== undefined) setIsPlaying(data.state.isPlaying);
-      } else if (data.type === 'queue') {
-        setQueue(data.queue || []);
-      } else if (data.type === 'likes') {
-        setLikes(data.likes || {});
-      } else if (data.type === 'ended') {
-        setError('Live session has ended');
-      }
-    });
-  };
+  }, [shareCode, hostCode, setupWebSocket]);
 
   // Host: Sync state to all participants
   const broadcastState = useCallback(async (state) => {
@@ -136,8 +139,8 @@ export default function LivePlaylistPage() {
 
     try {
       await syncPlaylistState(hostCode, state);
-    } catch (err) {
-      console.error('Failed to sync state:', err);
+    } catch (error) {
+      console.error('Failed to sync state:', error);
     }
   }, [isHost, hostCode]);
 
@@ -156,8 +159,8 @@ export default function LivePlaylistPage() {
       await queueSongToPlaylist(playlist.share_code, videoId);
       setShowBrowser(false);
       resetBrowserState();
-    } catch (err) {
-      console.error('Failed to queue song:', err);
+    } catch (error) {
+      console.error('Failed to queue song:', error);
     }
     setQueueingVideo(null);
   };
@@ -171,8 +174,8 @@ export default function LivePlaylistPage() {
     try {
       const results = await searchYouTube(youtubeSearch);
       setYoutubeResults(results);
-    } catch (err) {
-      console.error('Failed to search YouTube:', err);
+    } catch (error) {
+      console.error('Failed to search YouTube:', error);
     }
     setYoutubeLoading(false);
   };
@@ -187,8 +190,8 @@ export default function LivePlaylistPage() {
       await queueSongToPlaylist(playlist.share_code, imported.id);
       setShowBrowser(false);
       resetBrowserState();
-    } catch (err) {
-      console.error('Failed to queue YouTube video:', err);
+    } catch (error) {
+      console.error('Failed to queue YouTube video:', error);
     }
     setQueueingVideo(null);
   };
@@ -204,8 +207,8 @@ export default function LivePlaylistPage() {
   const handleLike = async (videoId) => {
     try {
       await likeVideoInPlaylist(playlist.share_code, videoId);
-    } catch (err) {
-      console.error('Failed to like:', err);
+    } catch (error) {
+      console.error('Failed to like:', error);
     }
   };
 
@@ -226,8 +229,8 @@ export default function LivePlaylistPage() {
           player2Video: player1Video ? result.approved : player2Video,
         });
       }
-    } catch (err) {
-      console.error('Failed to approve:', err);
+    } catch (error) {
+      console.error('Failed to approve:', error);
     }
   };
 

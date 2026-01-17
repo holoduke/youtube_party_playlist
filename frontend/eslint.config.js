@@ -24,6 +24,11 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Disable overly strict React Compiler rules that flag valid patterns
+      // setState in effects is valid for data loading, localStorage hydration, and state sync
+      'react-hooks/set-state-in-effect': 'off',
+      // Allow exporting hooks alongside components (common pattern for context)
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
 ])

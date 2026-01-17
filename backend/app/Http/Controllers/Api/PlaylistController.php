@@ -62,6 +62,13 @@ class PlaylistController extends Controller
         return $playlist->load(['videos.categories', 'user:id,name']);
     }
 
+    // GET /api/playlists/hash/{hash} - Get playlist by hash (for public URLs)
+    public function showByHash(string $hash)
+    {
+        $playlist = Playlist::where('hash', $hash)->firstOrFail();
+        return $playlist->load(['videos.categories', 'user:id,name']);
+    }
+
     // PUT /api/playlists/{playlist} - Update playlist
     public function update(Request $request, Playlist $playlist)
     {
@@ -323,5 +330,88 @@ class PlaylistController extends Controller
             ->withCount('videos')
             ->where('status', 'live')
             ->get();
+    }
+
+    // ==================== BROADCAST ENDPOINTS ====================
+
+    // POST /api/playlists/{playlist}/start-broadcast - Start broadcasting
+    public function startBroadcast(Playlist $playlist)
+    {
+        $playlist->update([
+            'is_broadcasting' => true,
+            'state' => [
+                'current_video' => null,
+                'next_video' => null,
+                'crossfade_value' => 50,
+                'updated_at' => now()->toISOString(),
+            ],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'broadcast_url' => "/broadcast/{$playlist->hash}",
+            'hash' => $playlist->hash,
+        ]);
+    }
+
+    // POST /api/playlists/{playlist}/stop-broadcast - Stop broadcasting
+    public function stopBroadcast(Playlist $playlist)
+    {
+        $playlist->update([
+            'is_broadcasting' => false,
+            'state' => null,
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
+    // POST /api/playlists/{playlist}/broadcast-sync - Sync broadcast state
+    public function broadcastSync(Request $request, Playlist $playlist)
+    {
+        if (!$playlist->is_broadcasting) {
+            return response()->json(['error' => 'Not broadcasting'], 400);
+        }
+
+        $validated = $request->validate([
+            'current_video' => 'nullable|array',
+            'next_video' => 'nullable|array',
+            'crossfade_value' => 'required|numeric|min:0|max:100',
+            'is_playing' => 'nullable|boolean',
+            'started_at' => 'nullable|numeric',
+        ]);
+
+        $playlist->update([
+            'state' => [
+                'current_video' => $validated['current_video'],
+                'next_video' => $validated['next_video'],
+                'crossfade_value' => $validated['crossfade_value'],
+                'is_playing' => $validated['is_playing'] ?? false,
+                'started_at' => $validated['started_at'] ?? null,
+                'updated_at' => now()->toISOString(),
+            ],
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
+    // GET /api/broadcast/{hash} - Get broadcast state (for polling viewers)
+    public function getBroadcastState(string $hash)
+    {
+        $playlist = Playlist::where('hash', $hash)
+            ->where('is_broadcasting', true)
+            ->first();
+
+        if (!$playlist) {
+            return response()->json([
+                'is_broadcasting' => false,
+                'message' => 'Broadcast not found or ended',
+            ], 404);
+        }
+
+        return response()->json([
+            'name' => $playlist->name,
+            'state' => $playlist->state,
+            'is_broadcasting' => true,
+        ]);
     }
 }

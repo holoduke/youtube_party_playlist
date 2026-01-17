@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getPlaylists, getPlaylist, createPlaylist, deletePlaylist, addVideoToPlaylist, goLivePlaylist } from '../services/api';
 import { useUser } from '../contexts/UserContext';
@@ -16,13 +16,7 @@ export default function PlaylistPanel({ onPlayPlaylist, activePlaylistId, onPlay
   const [joinCode, setJoinCode] = useState('');
   const [showJoinForm, setShowJoinForm] = useState(false);
 
-  useEffect(() => {
-    if (currentUser) {
-      loadPlaylists();
-    }
-  }, [currentUser]);
-
-  const loadPlaylists = async () => {
+  const loadPlaylists = useCallback(async () => {
     try {
       const data = await getPlaylists(currentUser?.id);
       setPlaylists(data);
@@ -30,7 +24,13 @@ export default function PlaylistPanel({ onPlayPlaylist, activePlaylistId, onPlay
       console.error('Failed to load playlists:', error);
     }
     setLoading(false);
-  };
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
+      loadPlaylists();
+    }
+  }, [currentUser, loadPlaylists]);
 
   const handleCreatePlaylist = async (e) => {
     e.preventDefault();

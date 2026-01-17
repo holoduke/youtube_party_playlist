@@ -12,22 +12,82 @@ class Playlist extends Model
         'description',
         'user_id',
         'is_public',
+        'is_broadcasting',
         'status',
         'share_code',
         'host_code',
         'state',
         'queue',
         'likes',
+        'hash',
     ];
 
     protected $casts = [
         'is_public' => 'boolean',
+        'is_broadcasting' => 'boolean',
         'state' => 'array',
         'queue' => 'array',
         'likes' => 'array',
     ];
 
     protected $hidden = ['host_code']; // Don't expose host code to guests
+
+    // Characters for URL-safe base64-like encoding (YouTube uses similar)
+    private const HASH_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_';
+    private const HASH_LENGTH = 11;
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($playlist) {
+            // Generate hash before saving if not set
+            if (empty($playlist->hash)) {
+                // We need an ID for the hash, but on create we don't have one yet
+                // So we'll generate a random base first and add ID after
+                $playlist->hash = self::generateHash();
+            }
+        });
+
+        static::created(function ($playlist) {
+            // After creation, regenerate hash with actual ID for better uniqueness
+            $playlist->hash = self::generateHash($playlist->id);
+            $playlist->saveQuietly();
+        });
+    }
+
+    /**
+     * Generate a YouTube-style hash (11 characters)
+     * Uses ID + timestamp + random bytes for uniqueness
+     */
+    public static function generateHash(?int $id = null): string
+    {
+        $chars = self::HASH_CHARS;
+        $length = self::HASH_LENGTH;
+
+        // Create entropy from ID, time, and random bytes
+        $entropy = ($id ?? 0) . microtime(true) . random_bytes(8);
+        $hash = hash('sha256', $entropy, true);
+
+        $result = '';
+        for ($i = 0; $i < $length; $i++) {
+            $byte = ord($hash[$i % strlen($hash)]);
+            $result .= $chars[$byte % 64];
+        }
+
+        // Ensure uniqueness
+        while (self::where('hash', $result)->exists()) {
+            $entropy = random_bytes(16);
+            $hash = hash('sha256', $entropy, true);
+            $result = '';
+            for ($i = 0; $i < $length; $i++) {
+                $byte = ord($hash[$i % strlen($hash)]);
+                $result .= $chars[$byte % 64];
+            }
+        }
+
+        return $result;
+    }
 
     public function user()
     {

@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { reorderPlaylistVideos, removeVideoFromPlaylist, addVideoToPlaylist } from '../services/api';
 
 export default function PlaylistContent({ playlist, onUpdate, onPlayVideo, isCollapsed, onToggleCollapse }) {
-  const [videos, setVideos] = useState([]);
+  // Use playlist.videos directly instead of syncing to local state
+  const videos = playlist?.videos || [];
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [isDragOverContainer, setIsDragOverContainer] = useState(false);
+  // Local optimistic state for reordering
+  const [localVideos, setLocalVideos] = useState(null);
 
-  useEffect(() => {
-    setVideos(playlist?.videos || []);
-  }, [playlist]);
+  // Use localVideos during drag operations, otherwise use playlist videos
+  const displayVideos = localVideos !== null ? localVideos : videos;
 
   // Check if drag is from external source (video grid)
   // During dragover we can only check types, not data
@@ -72,11 +74,12 @@ export default function PlaylistContent({ playlist, onUpdate, onPlayVideo, isCol
       return;
     }
 
-    const newVideos = [...videos];
+    const newVideos = [...displayVideos];
     const [draggedVideo] = newVideos.splice(draggedIndex, 1);
     newVideos.splice(dropIndex, 0, draggedVideo);
 
-    setVideos(newVideos);
+    // Optimistic update
+    setLocalVideos(newVideos);
     setDraggedIndex(null);
     setDragOverIndex(null);
 
@@ -85,9 +88,10 @@ export default function PlaylistContent({ playlist, onUpdate, onPlayVideo, isCol
       const videoIds = newVideos.map(v => v.id);
       const updated = await reorderPlaylistVideos(playlist.id, videoIds);
       onUpdate?.(updated);
+      setLocalVideos(null); // Clear optimistic state
     } catch (error) {
       console.error('Failed to reorder:', error);
-      setVideos(playlist?.videos || []);
+      setLocalVideos(null); // Revert to server state
     }
   };
 
@@ -155,9 +159,6 @@ export default function PlaylistContent({ playlist, onUpdate, onPlayVideo, isCol
     );
   }
 
-  // Show drop indicator for external drags on empty list or for adding at end
-  const showDropZone = isDragOverContainer && dragOverIndex === null;
-
   return (
     <div
       className={`bg-white/5 backdrop-blur-xl rounded-2xl border overflow-hidden transition-all ${
@@ -182,7 +183,7 @@ export default function PlaylistContent({ playlist, onUpdate, onPlayVideo, isCol
           </div>
           <div>
             <h3 className="text-white font-medium text-sm truncate max-w-[150px]">{playlist.name}</h3>
-            <p className="text-xs text-purple-300/60">{videos.length} tracks</p>
+            <p className="text-xs text-purple-300/60">{displayVideos.length} tracks</p>
           </div>
         </div>
         <svg
@@ -198,7 +199,7 @@ export default function PlaylistContent({ playlist, onUpdate, onPlayVideo, isCol
       {/* Content */}
       {!isCollapsed && (
         <div className="max-h-[400px] overflow-y-auto">
-          {videos.length === 0 ? (
+          {displayVideos.length === 0 ? (
             <div className={`text-center py-6 text-sm transition-colors ${
               isDragOverContainer ? 'text-green-300 bg-green-500/20' : 'text-purple-300/60'
             }`}>
@@ -215,7 +216,7 @@ export default function PlaylistContent({ playlist, onUpdate, onPlayVideo, isCol
             </div>
           ) : (
             <div className="p-2 space-y-1">
-              {videos.map((video, index) => (
+              {displayVideos.map((video, index) => (
                 <div
                   key={video.id}
                   draggable

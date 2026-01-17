@@ -12,8 +12,9 @@ export function UserProvider({ children }) {
     const savedUser = localStorage.getItem('barmania_user');
     if (savedUser) {
       try {
-        setCurrentUser(JSON.parse(savedUser));
-      } catch (e) {
+        const parsed = JSON.parse(savedUser);
+        setCurrentUser(parsed);
+      } catch {
         localStorage.removeItem('barmania_user');
       }
     }

@@ -1,18 +1,26 @@
-import { useMemo } from 'react';
+import { useState } from 'react';
+
+// Seeded pseudo-random for consistent values
+const seededRandom = (seed) => {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+};
+
+// Pre-generate bar configurations at module level for consistency
+const BAR_COUNT = 64;
+const BARS_CONFIG = Array.from({ length: BAR_COUNT }, (_, i) => ({
+  id: i,
+  // Use seeded random for deterministic but varied values
+  delay: seededRandom(i * 7) * 0.5,
+  duration: 0.3 + seededRandom(i * 13) * 0.4,
+  minHeight: 10 + seededRandom(i * 19) * 5,
+}));
 
 export default function WaveVisualizer({ isActive, playerNumber, frequencyData }) {
-  const barCount = 64;
+  const barCount = BAR_COUNT;
 
-  // Create bar configurations
-  const bars = useMemo(() => {
-    return Array.from({ length: barCount }, (_, i) => ({
-      id: i,
-      // Fallback animation values when no audio data
-      delay: Math.random() * 0.5,
-      duration: 0.3 + Math.random() * 0.4,
-      minHeight: 10 + Math.random() * 5,
-    }));
-  }, []);
+  // Use pre-generated bar configurations
+  const [bars] = useState(BARS_CONFIG);
 
   // Get height for a bar based on frequency data
   const getBarHeight = (index) => {

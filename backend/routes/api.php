@@ -21,6 +21,7 @@ Route::apiResource('videos', VideoController::class)->only(['index', 'show']);
 
 // Playlists (with user_id filter support)
 Route::get('/playlists/public', [PlaylistController::class, 'publicIndex']);
+Route::get('/playlists/hash/{hash}', [PlaylistController::class, 'showByHash']);
 Route::apiResource('playlists', PlaylistController::class);
 Route::post('/playlists/{playlist}/videos', [PlaylistController::class, 'addVideo']);
 Route::delete('/playlists/{playlist}/videos/{video}', [PlaylistController::class, 'removeVideo']);
@@ -40,6 +41,12 @@ Route::post('/playlists/{hostCode}/approve', [PlaylistController::class, 'approv
 // Live session actions (guest)
 Route::post('/playlists/{shareCode}/queue', [PlaylistController::class, 'queueSong']);
 Route::post('/playlists/{shareCode}/like', [PlaylistController::class, 'likeVideo']);
+
+// Broadcast endpoints (polling-based viewer)
+Route::post('/playlists/{playlist}/start-broadcast', [PlaylistController::class, 'startBroadcast']);
+Route::post('/playlists/{playlist}/stop-broadcast', [PlaylistController::class, 'stopBroadcast']);
+Route::post('/playlists/{playlist}/broadcast-sync', [PlaylistController::class, 'broadcastSync']);
+Route::get('/broadcast/{hash}', [PlaylistController::class, 'getBroadcastState']);
 
 // YouTube search/import
 Route::get('/youtube/search', [YouTubeController::class, 'search']);

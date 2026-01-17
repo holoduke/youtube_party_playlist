@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, createPlaylist, updatePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId } from './services/api';
+import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, createPlaylist, updatePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, startBroadcast, stopBroadcast, syncBroadcastState } from './services/api';
 import { initEcho, broadcastState } from './services/playerSync';
 import { useUser } from './contexts/UserContext';
 import CategoryFilter from './components/CategoryFilter';
@@ -10,6 +10,7 @@ import PlaylistVideoList from './components/PlaylistVideoList';
 import VideoPlayer from './components/VideoPlayer';
 import Crossfader from './components/Crossfader';
 import UserSelector from './components/UserSelector';
+import BroadcastModal from './components/BroadcastModal';
 
 function App() {
   const navigate = useNavigate();
@@ -27,31 +28,31 @@ function App() {
 
   // Playlist mode state
   const [activePlaylist, setActivePlaylist] = useState(null);
-  const [playlistIndex, setPlaylistIndex] = useState(0);
   const [playlistMode, setPlaylistMode] = useState(false);
 
   // Selected playlist content state
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
-  const [playlistContentCollapsed, setPlaylistContentCollapsed] = useState(false);
 
   // View mode: 'categories' or 'playlist' (synced with URL param 'view')
   const urlViewMode = searchParams.get('view');
   const viewMode = urlViewMode === 'playlist' ? 'playlist' : 'categories';
-  const setViewMode = (mode) => {
-    setSearchParams(prev => {
-      const newParams = new URLSearchParams(prev);
+  const setViewMode = (mode, playlistHash = null) => {
+    setSearchParams(() => {
+      const newParams = new URLSearchParams();
       if (mode === 'playlist') {
         newParams.set('view', 'playlist');
-      } else {
-        newParams.set('view', 'library');
+        if (playlistHash) {
+          newParams.set('pl', playlistHash);
+        }
       }
+      // Don't set any params for library/categories view (clean URL)
       return newParams;
     }, { replace: true });
   };
   const [viewingPlaylist, setViewingPlaylist] = useState(null);
 
   // Remote sync state
-  const [syncEnabled, setSyncEnabled] = useState(true);
+  const [syncEnabled] = useState(true);
   const playerStatesRef = useRef({ player1State: 'paused', player2State: 'paused' });
   const broadcastTimeoutRef = useRef(null);
 
@@ -63,6 +64,13 @@ function App() {
   const [partyDropdownOpen, setPartyDropdownOpen] = useState(false);
   const [partyLiveResult, setPartyLiveResult] = useState(null);
   const [partyLoading, setPartyLoading] = useState(false);
+
+  // Broadcast state
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastHash, setBroadcastHash] = useState(null);
+  const broadcastSyncTimeoutRef = useRef(null);
+  const videoStartedAtRef = useRef(null); // Timestamp when current video started playing
 
   // Playlist modal state
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -125,14 +133,6 @@ function App() {
 
   // Check if clipboard API is available (button always shows if supported)
   const clipboardSupported = typeof navigator?.clipboard?.readText === 'function';
-
-  // Get the remote URL for QR code
-  const getRemoteUrl = () => {
-    const host = window.location.hostname;
-    const port = window.location.port;
-    const protocol = window.location.protocol;
-    return `${protocol}//${host}${port ? ':' + port : ''}/remote`;
-  };
 
   // Get the live session URL
   const getLiveUrl = (shareCode) => {
@@ -234,33 +234,6 @@ function App() {
     }
   };
 
-  // Play a YouTube search result (imports first if needed)
-  const handlePlayYoutubeResult = async (video, playerNumber) => {
-    setImportingVideoId(video.youtube_id);
-    try {
-      // Import the video first
-      const imported = await importYouTubeVideo(video);
-      // Then play it - clear restored ID so it auto-starts
-      if (playerNumber === 1) {
-        setPlayer1Video(imported);
-        setRestoredVideoIds(prev => ({ ...prev, player1: null }));
-      } else {
-        setPlayer2Video(imported);
-        setRestoredVideoIds(prev => ({ ...prev, player2: null }));
-      }
-      // Stop playlist mode when manually selecting
-      setPlaylistMode(false);
-      setActivePlaylist(null);
-      // Close the dropdown and clear search
-      clearYoutubeSearch();
-      showNotification(`Playing "${video.title}" on Player ${playerNumber}`);
-    } catch (error) {
-      console.error('Failed to import video:', error);
-      showNotification('Failed to play video', 'error');
-    }
-    setImportingVideoId(null);
-  };
-
   // Add a YouTube search result to the library (and optionally to playlist)
   const handleAddYoutubeToLibrary = async (video, addToPlaylist = false) => {
     setImportingVideoId(video.youtube_id);
@@ -298,6 +271,16 @@ function App() {
     initEcho();
   }, []);
 
+  const loadPlaylists = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      const data = await getPlaylists(currentUser.id);
+      setPlaylists(data);
+    } catch (error) {
+      console.error('Failed to load playlists:', error);
+    }
+  }, [currentUser]);
+
   // Reload playlists when user changes
   useEffect(() => {
     if (currentUser) {
@@ -305,7 +288,7 @@ function App() {
     } else {
       setPlaylists([]);
     }
-  }, [currentUser]);
+  }, [currentUser, loadPlaylists]);
 
   // Broadcast player state changes to remote players (debounced for crossfader)
   useEffect(() => {
@@ -334,6 +317,39 @@ function App() {
     };
   }, [player1Video, player2Video, crossfadeValue, syncEnabled]);
 
+  // Sync broadcast state when broadcasting (debounced)
+  useEffect(() => {
+    if (!isBroadcasting || !selectedPlaylist) return;
+
+    // Clear any pending sync
+    if (broadcastSyncTimeoutRef.current) {
+      clearTimeout(broadcastSyncTimeoutRef.current);
+    }
+
+    // Debounce sync
+    broadcastSyncTimeoutRef.current = setTimeout(async () => {
+      const isPlayer1Active = crossfadeValue < 50;
+      const isPlaying = isPlayer1Active ? player1State.playing : player2State.playing;
+      try {
+        await syncBroadcastState(selectedPlaylist.id, {
+          current_video: isPlayer1Active ? player1Video : player2Video,
+          next_video: isPlayer1Active ? player2Video : player1Video,
+          crossfade_value: crossfadeValue,
+          is_playing: isPlaying,
+          started_at: videoStartedAtRef.current,
+        });
+      } catch (error) {
+        console.error('Failed to sync broadcast state:', error);
+      }
+    }, 100);
+
+    return () => {
+      if (broadcastSyncTimeoutRef.current) {
+        clearTimeout(broadcastSyncTimeoutRef.current);
+      }
+    };
+  }, [isBroadcasting, selectedPlaylist, player1Video, player2Video, crossfadeValue, player1State.playing, player2State.playing]);
+
   useEffect(() => {
     if (viewMode === 'categories') {
       loadVideos(selectedCategory);
@@ -358,16 +374,6 @@ function App() {
       console.error('Failed to load videos:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadPlaylists = async () => {
-    if (!currentUser) return;
-    try {
-      const data = await getPlaylists(currentUser.id);
-      setPlaylists(data);
-    } catch (error) {
-      console.error('Failed to load playlists:', error);
     }
   };
 
@@ -488,40 +494,6 @@ function App() {
       setPlayer1Video(video);
     } else {
       setPlayer2Video(video);
-    }
-  };
-
-  const handlePlayVideoFromPlaylist = (video, index) => {
-    // Odd indices (0, 2, 4...) go to Player 1, even indices (1, 3, 5...) go to Player 2
-    const playerNumber = index % 2 === 0 ? 1 : 2;
-
-    // Set the video on the appropriate player - clear restored IDs for user action
-    if (playerNumber === 1) {
-      setPlayer1Video(video);
-      setRestoredVideoIds(prev => ({ ...prev, player1: null }));
-    } else {
-      setPlayer2Video(video);
-      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
-    }
-
-    // If we have a selected playlist, activate playlist mode
-    if (selectedPlaylist) {
-      setActivePlaylist(selectedPlaylist);
-      setPlaylistMode(true);
-      setPlaylistIndex(index);
-
-      // Also pre-load the next track on the other player if available
-      const nextIndex = index + 1;
-      if (nextIndex < selectedPlaylist.videos.length) {
-        const nextVideo = selectedPlaylist.videos[nextIndex];
-        if (playerNumber === 1) {
-          setPlayer2Video(nextVideo);
-          setRestoredVideoIds(prev => ({ ...prev, player2: null }));
-        } else {
-          setPlayer1Video(nextVideo);
-          setRestoredVideoIds(prev => ({ ...prev, player1: null }));
-        }
-      }
     }
   };
 
@@ -667,43 +639,24 @@ function App() {
     logout();
   };
 
-  const handlePlayPlaylist = useCallback(async (playlist) => {
-    // Set as selected playlist to show content
-    setSelectedPlaylist(playlist);
-    setPlaylistContentCollapsed(false);
-
-    // Switch to playlist view mode - show playlist videos in the main list
-    setViewMode('playlist');
-    setViewingPlaylist(playlist);
-
-    if (!playlist.videos || playlist.videos.length === 0) return;
-
-    setActivePlaylist(playlist);
-    setPlaylistIndex(0);
-    setPlaylistMode(true);
-
-    // Start first video on player 1 - clear restored IDs for user action
-    setPlayer1Video(playlist.videos[0]);
-    setRestoredVideoIds(prev => ({ ...prev, player1: null }));
-    // Queue second video on player 2 if available
-    if (playlist.videos.length > 1) {
-      setPlayer2Video(playlist.videos[1]);
-      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
-    }
-    // Start with crossfade at 0 (player 1 active)
-    setCrossfadeValue(0);
-  }, []);
-
   const handleSelectPlaylist = useCallback(async (playlistId, switchToPlaylistView = false) => {
     try {
       const playlist = await getPlaylist(playlistId);
       setSelectedPlaylist(playlist);
-      setPlaylistContentCollapsed(false);
       setViewingPlaylist(playlist);
+
+      // Restore broadcasting state if playlist is broadcasting
+      if (playlist.is_broadcasting) {
+        setIsBroadcasting(true);
+        setBroadcastHash(playlist.hash);
+      } else {
+        setIsBroadcasting(false);
+        setBroadcastHash(null);
+      }
 
       // Only switch to playlist view mode if explicitly requested
       if (switchToPlaylistView) {
-        setViewMode('playlist');
+        setViewMode('playlist', playlist.hash);
       }
 
       // Save to localStorage for persistence
@@ -711,7 +664,7 @@ function App() {
     } catch (error) {
       console.error('Failed to load playlist:', error);
     }
-  }, []);
+  }, [setViewMode]);
 
   // Restore saved playlist and playback state after playlists are loaded
   useEffect(() => {
@@ -763,22 +716,6 @@ function App() {
     }
   }, [playlists, selectedPlaylist, handleSelectPlaylist]);
 
-  const handlePlaylistContentUpdate = useCallback((updatedPlaylist) => {
-    // Update selectedPlaylist if it matches
-    if (selectedPlaylist?.id === updatedPlaylist.id) {
-      setSelectedPlaylist(updatedPlaylist);
-    }
-    // Also update activePlaylist if it's the same one
-    if (activePlaylist?.id === updatedPlaylist.id) {
-      setActivePlaylist(updatedPlaylist);
-    }
-    // Update viewingPlaylist if it's the same one
-    if (viewingPlaylist?.id === updatedPlaylist.id) {
-      setViewingPlaylist(updatedPlaylist);
-    }
-    loadPlaylists();
-  }, [selectedPlaylist?.id, activePlaylist?.id, viewingPlaylist?.id]);
-
   const handlePlaylistVideoEnded = useCallback((playerNumber) => {
     if (!playlistMode || !activePlaylist) return;
 
@@ -807,7 +744,6 @@ function App() {
       } else {
         setPlayer2Video(videos[nextIndex]);
       }
-      setPlaylistIndex(nextIndex);
     } else {
       // No more tracks for this player
       // Check if the other player still has content playing
@@ -818,50 +754,6 @@ function App() {
       }
     }
   }, [playlistMode, activePlaylist, player1Video, player2Video]);
-
-  const stopPlaylist = () => {
-    setPlaylistMode(false);
-    setActivePlaylist(null);
-  };
-
-  // Load next song on specified player
-  const loadNextOnPlayer = (playerNumber) => {
-    if (!activePlaylist) return;
-
-    const videos = activePlaylist.videos;
-    const currentVideo = playerNumber === 1 ? player1Video : player2Video;
-    const currentIndex = currentVideo
-      ? videos.findIndex(v => v.id === currentVideo.id)
-      : -2 + playerNumber; // Start from -2 for P1, -1 for P2
-
-    // Find next track for this player (skip one)
-    const nextIndex = currentIndex + 2;
-
-    if (nextIndex < videos.length) {
-      if (playerNumber === 1) {
-        setPlayer1Video(videos[nextIndex]);
-      } else {
-        setPlayer2Video(videos[nextIndex]);
-      }
-      setPlaylistIndex(nextIndex);
-      showNotification(`Loaded track ${nextIndex + 1} on Player ${playerNumber}`);
-    } else {
-      showNotification(`No more tracks for Player ${playerNumber}`, 'error');
-    }
-  };
-
-  // Skip to next track (whichever player is not active)
-  const skipToNext = () => {
-    if (!activePlaylist) return;
-
-    // Determine which player to load next based on crossfade position
-    const inactivePlayer = crossfadeValue < 50 ? 2 : 1;
-    loadNextOnPlayer(inactivePlayer);
-  };
-
-  const currentPlaylistVideo = playlistMode && activePlaylist
-    ? playlistIndex + (crossfadeValue < 50 ? 1 : 2)
-    : null;
 
   // Handle category selection - switch back to categories view
   const handleCategorySelect = (categoryId) => {
@@ -876,7 +768,7 @@ function App() {
     : videos;
 
   // Handler for player state updates
-  const handlePlayerStateUpdate = useCallback((playerNumber, state, timeInfo) => {
+  const handlePlayerStateUpdate = useCallback((playerNumber, state) => {
     playerStatesRef.current[`player${playerNumber}State`] = state;
 
     // Update player state for UI
@@ -885,6 +777,13 @@ function App() {
       setPlayer1State(prev => ({ ...prev, playing: isPlaying }));
     } else {
       setPlayer2State(prev => ({ ...prev, playing: isPlaying }));
+    }
+
+    // Track when the active player starts playing (for broadcast sync)
+    const isPlayer1Active = crossfadeValue < 50;
+    const isActivePlayer = (playerNumber === 1 && isPlayer1Active) || (playerNumber === 2 && !isPlayer1Active);
+    if (isActivePlayer && isPlaying) {
+      videoStartedAtRef.current = Date.now();
     }
 
     if (syncEnabled) {
@@ -930,29 +829,56 @@ function App() {
 
   // Toggle the active player (based on crossfade position)
   // If no videos loaded, load from playlist first
+  // Also ensures the "next" video is loaded in the inactive player
   const toggleActivePlayer = () => {
     const isPlayer1Active = crossfadeValue < 50;
     const activeVideo = isPlayer1Active ? player1Video : player2Video;
+    const inactiveVideo = isPlayer1Active ? player2Video : player1Video;
+    const playlistVideos = selectedPlaylist?.videos || [];
 
     // If no video loaded, try to load from playlist
     if (!activeVideo) {
-      const playlistVideos = selectedPlaylist?.videos || [];
       if (playlistVideos.length === 0) {
         return; // No videos available
       }
-      // Load first video into player 1
+      // Load first video into player 1 (autoplay)
       setPlayer1Video(playlistVideos[0]);
-      setRestoredVideoIds(prev => ({ ...prev, player1: null }));
-      // Load second video into player 2 if available
+      setRestoredVideoIds(prev => ({ ...prev, player1: null })); // null = autoplay
+      // Load second video into player 2 if available (just load, don't play)
       if (playlistVideos.length > 1) {
         setPlayer2Video(playlistVideos[1]);
-        setRestoredVideoIds(prev => ({ ...prev, player2: null }));
+        setRestoredVideoIds(prev => ({ ...prev, player2: playlistVideos[1].youtube_id })); // youtube_id = load only, no autoplay
       }
       setCrossfadeValue(0); // Ensure player 1 is active
       setAutoPlayEnabled(true);
       return;
     }
 
+    // Check if the inactive player has the correct "next" video
+    if (playlistVideos.length > 0) {
+      const activeIndex = playlistVideos.findIndex(v => v.id === activeVideo?.id);
+      const nextIndex = activeIndex + 1;
+
+      if (activeIndex >= 0 && nextIndex < playlistVideos.length) {
+        const expectedNextVideo = playlistVideos[nextIndex];
+
+        // If inactive player doesn't have the correct next video, load it
+        if (inactiveVideo?.id !== expectedNextVideo.id) {
+          console.log(`[Play] Loading next video "${expectedNextVideo.title}" into inactive player`);
+          if (isPlayer1Active) {
+            // Player 1 is active, so load next into Player 2
+            setPlayer2Video(expectedNextVideo);
+            setRestoredVideoIds(prev => ({ ...prev, player2: expectedNextVideo.youtube_id }));
+          } else {
+            // Player 2 is active, so load next into Player 1
+            setPlayer1Video(expectedNextVideo);
+            setRestoredVideoIds(prev => ({ ...prev, player1: expectedNextVideo.youtube_id }));
+          }
+        }
+      }
+    }
+
+    // Toggle play/pause on the active player
     if (isPlayer1Active) {
       togglePlayer1();
     } else {
@@ -976,47 +902,6 @@ function App() {
 
   // Get the auto-play video list (from selected playlist or viewing playlist)
   const autoPlayVideos = selectedPlaylist?.videos || viewingPlaylist?.videos || [];
-
-  // Enable auto-play - start from the beginning
-  const enableAutoPlay = useCallback(() => {
-    if (autoPlayVideos.length === 0) {
-      showNotification('No videos in playlist', 'error');
-      return;
-    }
-
-    // Stop current playback
-    if (player1Ref.current) player1Ref.current.pause();
-    if (player2Ref.current) player2Ref.current.pause();
-
-    // Reset state
-    setAutoPlayIndex(0);
-    setCrossfadeValue(0); // Start with P1 active
-
-    // Load first two videos - clear restored IDs for user action
-    setPlayer1Video(autoPlayVideos[0]);
-    setRestoredVideoIds(prev => ({ ...prev, player1: null }));
-    if (autoPlayVideos.length > 1) {
-      setPlayer2Video(autoPlayVideos[1]);
-      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
-    } else {
-      setPlayer2Video(null);
-    }
-
-    // Enable auto play
-    setAutoPlayEnabled(true);
-
-    showNotification(`Auto Play started: ${autoPlayVideos.length} songs`);
-  }, [autoPlayVideos, showNotification]);
-
-  // Disable auto-play
-  const disableAutoPlay = useCallback(() => {
-    setAutoPlayEnabled(false);
-    setIsAutoFading(false);
-    if (autoFadeIntervalRef.current) {
-      clearInterval(autoFadeIntervalRef.current);
-      autoFadeIntervalRef.current = null;
-    }
-  }, []);
 
   // Manual crossfade between the two players
   const skipToNextWithFade = useCallback(() => {
@@ -1233,7 +1118,7 @@ function App() {
         }
       }, 500); // Update every 500ms
     }
-  }, [autoPlayEnabled, isAutoFading, crossfadeValue, player1State, player2State, autoPlayIndex, autoPlayVideos, autoQueueEnabled]);
+  }, [autoPlayEnabled, isAutoFading, crossfadeValue, player1State, player2State, autoPlayIndex, autoPlayVideos, autoQueueEnabled, player1Video, player2Video]);
 
   // Get the "active" player based on crossfade
   const activePlayer = crossfadeValue < 50 ? 1 : 2;
@@ -1505,7 +1390,7 @@ function App() {
               {/* QR Code */}
               <div className="bg-white p-4 rounded-2xl inline-block mb-4">
                 <QRCodeSVG
-                  value={`${window.location.origin}/playlist/${selectedPlaylist.id}`}
+                  value={`${window.location.origin}/watch?pl=${selectedPlaylist.hash}`}
                   size={180}
                   level="H"
                   includeMargin={false}
@@ -1516,7 +1401,7 @@ function App() {
               <div className="bg-black/30 rounded-xl p-3 mb-4">
                 <p className="text-purple-300/60 text-xs mb-1 uppercase tracking-wide">Share this URL</p>
                 <p className="text-white font-mono text-sm break-all select-all">
-                  {`${window.location.origin}/playlist/${selectedPlaylist.id}`}
+                  {`${window.location.origin}/watch?pl=${selectedPlaylist.hash}`}
                 </p>
               </div>
 
@@ -1524,7 +1409,7 @@ function App() {
               <div className="flex gap-3">
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/playlist/${selectedPlaylist.id}`);
+                    navigator.clipboard.writeText(`${window.location.origin}/watch?pl=${selectedPlaylist.hash}`);
                     showNotification('URL copied to clipboard!');
                   }}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
@@ -1563,6 +1448,27 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Broadcast Modal */}
+      <BroadcastModal
+        isOpen={showBroadcastModal}
+        onClose={() => setShowBroadcastModal(false)}
+        playlistName={selectedPlaylist?.name || ''}
+        broadcastHash={broadcastHash}
+        onStopBroadcast={async () => {
+          try {
+            await stopBroadcast(selectedPlaylist.id);
+            setIsBroadcasting(false);
+            setBroadcastHash(null);
+            setShowBroadcastModal(false);
+            showNotification('Broadcast stopped');
+          } catch (error) {
+            console.error('Failed to stop broadcast:', error);
+            showNotification('Failed to stop broadcast', 'error');
+          }
+        }}
+        showNotification={showNotification}
+      />
 
       {/* Playlist Selection Modal */}
       {showPlaylistModal && (
@@ -1902,6 +1808,43 @@ function App() {
                       </svg>
                     </button>
                   )}
+
+                  {/* Broadcast Button */}
+                  {selectedPlaylist && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (isBroadcasting) {
+                          setShowBroadcastModal(true);
+                        } else {
+                          try {
+                            const result = await startBroadcast(selectedPlaylist.id);
+                            setIsBroadcasting(true);
+                            setBroadcastHash(result.hash);
+                            setShowBroadcastModal(true);
+                          } catch (error) {
+                            console.error('Failed to start broadcast:', error);
+                            showNotification('Failed to start broadcast', 'error');
+                          }
+                        }
+                      }}
+                      className={`p-2 rounded-lg transition-all flex-shrink-0 ${
+                        isBroadcasting
+                          ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30 animate-pulse'
+                          : 'bg-white/10 text-purple-300/60 hover:bg-white/20 hover:text-white'
+                      }`}
+                      title={isBroadcasting ? 'Broadcasting (click to view)' : 'Start Broadcast'}
+                    >
+                      {/* Radio tower icon */}
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
+                        <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
+                        <circle cx="12" cy="12" r="2" />
+                        <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
+                        <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
 
                 {/* Playback Controls */}
@@ -1984,14 +1927,24 @@ function App() {
                       </button>
                       <button
                         onClick={() => setAutoQueueEnabled(prev => !prev)}
-                        className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors font-bold text-sm ${
+                        className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
                           autoQueueEnabled
                             ? 'bg-green-500/30 text-green-300 hover:bg-green-500/50'
                             : 'bg-white/10 text-white/50 hover:bg-white/20'
                         }`}
                         title={autoQueueEnabled ? 'Auto-queue ON: Next video loads after fade' : 'Auto-queue OFF: Manual loading only'}
                       >
-                        C
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                          {/* Clock face */}
+                          <circle cx="12" cy="12" r="5" />
+                          {/* Clock hands */}
+                          <path d="M12 8v4l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" className={autoQueueEnabled ? 'stroke-green-900' : 'stroke-gray-900'} />
+                          {/* Rotating arrows */}
+                          <path d="M20.5 12a8.5 8.5 0 0 1-8.5 8.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M12 23l2-2.5-2.5-.5" fill="currentColor" />
+                          <path d="M3.5 12A8.5 8.5 0 0 1 12 3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          <path d="M12 1l-2 2.5 2.5.5" fill="currentColor" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -2094,7 +2047,7 @@ function App() {
                       value={youtubeSearchQuery}
                       onChange={(e) => handleYoutubeSearchInput(e.target.value)}
                       onFocus={() => (youtubeSearchQuery || youtubeSearchResults.length > 0) && setShowYoutubeDropdown(true)}
-                      onBlur={(e) => {
+                      onBlur={() => {
                         // Delay to allow click on dropdown items
                         setTimeout(() => setShowYoutubeDropdown(false), 200);
                       }}
@@ -2281,7 +2234,7 @@ function App() {
                             if (viewMode === 'playlist') {
                               startEditingPlaylistName();
                             } else if (selectedPlaylist) {
-                              setViewMode('playlist');
+                              setViewMode('playlist', selectedPlaylist.hash);
                               setViewingPlaylist(selectedPlaylist);
                             }
                           }}
@@ -2318,7 +2271,7 @@ function App() {
                   onReorder={handleReorderPlaylist}
                   onRemove={(videoId) => handleRemoveFromPlaylist(videoId, viewingPlaylist.id)}
                   activeVideoId={activeVideo?.id}
-                  onQueue={(video, index) => {
+                  onQueue={(video) => {
                     // Queue video in the INACTIVE player (no fade)
                     const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
                     const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
@@ -2335,7 +2288,7 @@ function App() {
                     setPlaylistMode(true);
                     setAutoPlayEnabled(true);
                   }}
-                  onPlay={(video, index) => {
+                  onPlay={(video) => {
                     // Queue video in the INACTIVE player and immediately fade to it
                     const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
                     const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;

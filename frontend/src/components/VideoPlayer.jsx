@@ -1,7 +1,7 @@
 import YouTube from 'react-youtube';
 import { useRef, useEffect, useState, useImperativeHandle, forwardRef, memo, useMemo, useCallback } from 'react';
 
-const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, frequencyData, onStateUpdate, autoStart = true, onAddToPlaylist, isInPlaylist, onVideoDrop, showDropOverlay }, ref) => {
+const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, onStateUpdate, autoStart = true, onAddToPlaylist, isInPlaylist, onVideoDrop, showDropOverlay }, ref) => {
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -13,13 +13,16 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
   // Track the currently loaded video ID to prevent unnecessary reloads
   const loadedVideoIdRef = useRef(null);
   // Track the initial video ID for the YouTube component (stable after first set)
-  const initialVideoIdRef = useRef(null);
+  const [initialVideoId, setInitialVideoId] = useState(null);
   // Track autoStart value for when player becomes ready
   const autoStartRef = useRef(autoStart);
+
   // Keep ref updated until player is ready (to catch late state updates)
-  if (!isPlayerReady) {
-    autoStartRef.current = autoStart;
-  }
+  useEffect(() => {
+    if (!isPlayerReady) {
+      autoStartRef.current = autoStart;
+    }
+  }, [autoStart, isPlayerReady]);
 
   // Reset drag over state when overlay is hidden
   useEffect(() => {
@@ -128,17 +131,17 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     getDuration: () => duration,
     getRemainingTime: () => Math.max(0, duration - currentTime),
     isReady: () => isPlayerReady,
-  }), [isPlaying, currentTime, duration, isPlayerReady, loadVideoInternal]);
+  }), [isPlaying, currentTime, duration, isPlayerReady, loadVideoInternal, playerNumber]);
 
   // Track if volume needs to be applied when player becomes ready
   const pendingVolumeRef = useRef(volume);
-  pendingVolumeRef.current = volume;
 
   useEffect(() => {
+    pendingVolumeRef.current = volume;
     if (playerRef.current) {
       try {
         playerRef.current.setVolume(volume);
-      } catch (e) {
+      } catch {
         // Player might be in an invalid state during video change
       }
     }
@@ -155,8 +158,8 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     const newVideoId = video?.youtube_id;
 
     // Set initial video ID on first video (for YouTube component mount)
-    if (newVideoId && !initialVideoIdRef.current) {
-      initialVideoIdRef.current = newVideoId;
+    if (newVideoId && !initialVideoId) {
+      setInitialVideoId(newVideoId);
       loadedVideoIdRef.current = newVideoId;
     }
 
@@ -173,7 +176,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       setIsPlaying(false);
       stopTimeTracking();
     }
-  }, [video?.youtube_id, isPlayerReady, autoStart, loadVideoInternal, stopTimeTracking]);
+  }, [video?.youtube_id, isPlayerReady, autoStart, loadVideoInternal, stopTimeTracking, initialVideoId]);
 
   // Stable opts - never changes after mount (autoplay disabled, we control via API)
   const opts = useMemo(() => ({
@@ -213,7 +216,9 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       if (playerRef.current) {
         try {
           playerRef.current.setVolume(pendingVolumeRef.current);
-        } catch (e) {}
+        } catch {
+          // Player may be in an invalid state
+        }
       }
       onStateUpdate?.(playerNumber, 'playing', { currentTime, duration });
     } else if (event.data === 0) {
@@ -241,7 +246,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
   const labelBg = playerNumber === 1 ? 'bg-purple-600' : 'bg-pink-600';
 
   // Use initial video ID for YouTube component (stable, never changes)
-  const stableVideoId = initialVideoIdRef.current || video?.youtube_id;
+  const stableVideoId = initialVideoId || video?.youtube_id;
 
   return (
     <div
