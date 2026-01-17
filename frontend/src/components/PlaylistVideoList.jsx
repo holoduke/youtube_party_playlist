@@ -8,7 +8,7 @@ const formatDuration = (seconds) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
-export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay, activeVideoId }) {
+export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay, onQueue, activeVideoId }) {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -163,44 +163,45 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                 <h3 className={`font-medium truncate ${isActive ? 'text-green-300' : 'text-white'}`} title={video.title}>
                   {video.title}
                 </h3>
-                <div className="flex items-center gap-3 mt-1 text-xs text-white/50">
-                  {video.duration && (
-                    <span className="flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      {formatDuration(video.duration)}
-                    </span>
-                  )}
-                  {video.artist && (
-                    <span className="flex items-center gap-1 truncate">
-                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      {video.artist}
-                    </span>
-                  )}
-                  {video.categories?.length > 0 && (
-                    <div className="flex gap-1 flex-wrap">
-                      {video.categories.slice(0, 2).map((cat) => (
-                        <span
-                          key={cat.id}
-                          className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px]"
-                        >
-                          {cat.name}
-                        </span>
-                      ))}
-                      {video.categories.length > 2 && (
-                        <span className="text-purple-300/60">+{video.categories.length - 2}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
+                {video.duration && (
+                  <p className="text-white/50 text-xs mt-0.5">
+                    {formatDuration(video.duration)}
+                  </p>
+                )}
+                {video.categories?.length > 0 && (
+                  <div className="flex gap-1 flex-wrap mt-1">
+                    {video.categories.slice(0, 2).map((cat) => (
+                      <span
+                        key={cat.id}
+                        className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px]"
+                      >
+                        {cat.name}
+                      </span>
+                    ))}
+                    {video.categories.length > 2 && (
+                      <span className="text-purple-300/60 text-[10px]">+{video.categories.length - 2}</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {/* Play button */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {/* Queue button - queue as next without fading */}
+                {!isActive && onQueue && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onQueue(video, index);
+                    }}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 bg-white/10 text-white/60 hover:bg-purple-500 hover:text-white hover:scale-110 font-bold text-sm"
+                    title="Queue as next"
+                  >
+                    C
+                  </button>
+                )}
+
+                {/* Play button - queue as next and immediately fade */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -211,7 +212,7 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                       ? 'bg-green-500/20 text-green-300 cursor-default'
                       : 'bg-white/10 text-white/60 hover:bg-green-500 hover:text-white hover:scale-110'
                   }`}
-                  title={isActive ? 'Now playing' : 'Play'}
+                  title={isActive ? 'Now playing' : 'Play now (queue & fade)'}
                   disabled={isActive}
                 >
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">

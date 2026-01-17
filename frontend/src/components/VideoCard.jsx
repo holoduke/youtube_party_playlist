@@ -73,6 +73,11 @@ export default function VideoCard({ video, onShowAddModal }) {
         <h3 className="text-sm font-medium text-white truncate" title={video.title}>
           {video.title}
         </h3>
+        {video.duration && (
+          <p className="text-white/50 text-xs mt-0.5">
+            {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
+          </p>
+        )}
         <div className="flex flex-wrap gap-1 mt-1">
           {video.categories?.map((cat) => (
             <span

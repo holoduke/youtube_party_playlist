@@ -123,6 +123,9 @@ function App() {
     };
   }, []);
 
+  // Check if clipboard API is available (button always shows if supported)
+  const clipboardSupported = typeof navigator?.clipboard?.readText === 'function';
+
   // Get the remote URL for QR code
   const getRemoteUrl = () => {
     const host = window.location.hostname;
@@ -1988,7 +1991,7 @@ function App() {
                         }`}
                         title={autoQueueEnabled ? 'Auto-queue ON: Next video loads after fade' : 'Auto-queue OFF: Manual loading only'}
                       >
-                        A
+                        C
                       </button>
                     </div>
                   </div>
@@ -2081,38 +2084,39 @@ function App() {
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden">
               {/* YouTube Search with Autocomplete Dropdown */}
               <div className="relative p-3 border-b border-white/10 bg-gradient-to-r from-red-600/10 to-pink-600/10">
-                <div className="relative">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400 z-10" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                  </svg>
-                  <input
-                    type="text"
-                    value={youtubeSearchQuery}
-                    onChange={(e) => handleYoutubeSearchInput(e.target.value)}
-                    onFocus={() => (youtubeSearchQuery || youtubeSearchResults.length > 0) && setShowYoutubeDropdown(true)}
-                    onBlur={(e) => {
-                      // Delay to allow click on dropdown items
-                      setTimeout(() => setShowYoutubeDropdown(false), 200);
-                    }}
-                    placeholder="Search YouTube..."
-                    className="w-full pl-10 pr-10 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-red-300/50 focus:outline-none focus:border-red-500 text-sm"
-                  />
-                  {youtubeSearchLoading && (
-                    <div className="absolute right-10 top-1/2 -translate-y-1/2">
-                      <div className="w-4 h-4 border-2 border-red-300/30 border-t-red-400 rounded-full animate-spin" />
-                    </div>
-                  )}
-                  {youtubeSearchQuery && (
-                    <button
-                      type="button"
-                      onClick={clearYoutubeSearch}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white z-10"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400 z-10" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                    </svg>
+                    <input
+                      type="text"
+                      value={youtubeSearchQuery}
+                      onChange={(e) => handleYoutubeSearchInput(e.target.value)}
+                      onFocus={() => (youtubeSearchQuery || youtubeSearchResults.length > 0) && setShowYoutubeDropdown(true)}
+                      onBlur={(e) => {
+                        // Delay to allow click on dropdown items
+                        setTimeout(() => setShowYoutubeDropdown(false), 200);
+                      }}
+                      placeholder="Search YouTube or paste URL..."
+                      className="w-full pl-10 pr-10 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-red-300/50 focus:outline-none focus:border-red-500 text-sm"
+                    />
+                    {youtubeSearchLoading && (
+                      <div className="absolute right-10 top-1/2 -translate-y-1/2">
+                        <div className="w-4 h-4 border-2 border-red-300/30 border-t-red-400 rounded-full animate-spin" />
+                      </div>
+                    )}
+                    {youtubeSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={clearYoutubeSearch}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white z-10"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
 
                   {/* Autocomplete Dropdown */}
                   {showYoutubeDropdown && youtubeSearchQuery && (
@@ -2151,71 +2155,78 @@ function App() {
                                 </div>
                               </div>
 
-                              {/* Title */}
+                              {/* Title and duration */}
                               <div className="flex-1 min-w-0">
                                 <h4 className="text-white text-sm font-medium line-clamp-2">{video.title}</h4>
-                              </div>
-
-                              {/* Action buttons */}
-                              <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={() => handlePlayYoutubeResult(video, 1)}
-                                  disabled={importingVideoId === video.youtube_id}
-                                  className="flex items-center gap-1 px-2 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 text-white rounded-lg transition-colors text-xs font-medium"
-                                  title="Play on Player 1"
-                                >
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                  </svg>
-                                  P1
-                                </button>
-                                <button
-                                  onClick={() => handlePlayYoutubeResult(video, 2)}
-                                  disabled={importingVideoId === video.youtube_id}
-                                  className="flex items-center gap-1 px-2 py-1.5 bg-pink-600 hover:bg-pink-500 disabled:bg-pink-600/50 text-white rounded-lg transition-colors text-xs font-medium"
-                                  title="Play on Player 2"
-                                >
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                  </svg>
-                                  P2
-                                </button>
-                                <button
-                                  onClick={() => handleAddYoutubeToLibrary(video, false)}
-                                  disabled={importingVideoId === video.youtube_id}
-                                  className="flex items-center gap-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white rounded-lg transition-colors text-xs font-medium"
-                                  title="Add to library"
-                                >
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                  </svg>
-                                </button>
-                                {selectedPlaylist && (
-                                  <button
-                                    onClick={() => handleAddYoutubeToLibrary(video, true)}
-                                    disabled={importingVideoId === video.youtube_id}
-                                    className="flex items-center gap-1 px-2 py-1.5 bg-green-600 hover:bg-green-500 disabled:bg-green-600/50 text-white rounded-lg transition-colors text-xs font-medium"
-                                    title={`Add to ${selectedPlaylist.name}`}
-                                  >
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                                    </svg>
-                                  </button>
+                                {video.duration && (
+                                  <p className="text-white/50 text-xs mt-0.5">
+                                    {typeof video.duration === 'number'
+                                      ? `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}`
+                                      : video.duration}
+                                  </p>
                                 )}
                               </div>
+
+                              {/* Add to playlist button */}
+                              <button
+                                onClick={() => {
+                                  handleAddYoutubeToLibrary(video, !!selectedPlaylist);
+                                  setShowYoutubeDropdown(false);
+                                }}
+                                disabled={importingVideoId === video.youtube_id}
+                                className="flex-shrink-0 p-2 bg-green-600 hover:bg-green-500 disabled:bg-green-600/50 text-white rounded-lg transition-all hover:scale-110"
+                                title={selectedPlaylist ? `Add to ${selectedPlaylist.name}` : 'Add to library'}
+                              >
+                                {importingVideoId === video.youtube_id ? (
+                                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                )}
+                              </button>
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
                   )}
+                  </div>
+
+                  {/* Paste from clipboard button */}
+                  {clipboardSupported && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const text = await navigator.clipboard.readText();
+                          if (text && text.trim()) {
+                            handleYoutubeSearchInput(text.trim());
+                            setShowYoutubeDropdown(true);
+                          } else {
+                            showNotification('Clipboard is empty', 'error');
+                          }
+                        } catch (err) {
+                          console.error('Failed to read clipboard:', err);
+                          showNotification('Cannot access clipboard', 'error');
+                        }
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white/70 hover:text-white transition-colors text-sm whitespace-nowrap"
+                      title="Add video from clipboard URL"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      Add from clipboard
+                    </button>
+                  )}
                 </div>
 
                 {/* Click outside to close dropdown */}
                 {showYoutubeDropdown && (
                   <div
-                    className="fixed inset-0 z-[99]"
-                    onClick={() => setShowYoutubeDropdown(false)}
+                    className="fixed inset-0 z-[50]"
+                    onMouseDown={() => setShowYoutubeDropdown(false)}
                   />
                 )}
               </div>
@@ -2307,21 +2318,43 @@ function App() {
                   onReorder={handleReorderPlaylist}
                   onRemove={(videoId) => handleRemoveFromPlaylist(videoId, viewingPlaylist.id)}
                   activeVideoId={activeVideo?.id}
-                  onPlay={(video, index) => {
-                    // Play in current active player
+                  onQueue={(video, index) => {
+                    // Queue video in the INACTIVE player (no fade)
                     const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
-                    if (activePlayerNumber === 1) {
+                    const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
+                    console.log(`[Queue] Loading "${video.title}" into Player ${inactivePlayer}`);
+                    if (inactivePlayer === 1) {
                       setPlayer1Video(video);
-                      setRestoredVideoIds(prev => ({ ...prev, player1: null }));
+                      setRestoredVideoIds(prev => ({ ...prev, player1: video.youtube_id }));
                     } else {
                       setPlayer2Video(video);
-                      setRestoredVideoIds(prev => ({ ...prev, player2: null }));
+                      setRestoredVideoIds(prev => ({ ...prev, player2: video.youtube_id }));
                     }
-                    // Set playlist mode with this index
+                    // Set playlist mode
                     setActivePlaylist(viewingPlaylist);
-                    setPlaylistIndex(index);
                     setPlaylistMode(true);
                     setAutoPlayEnabled(true);
+                  }}
+                  onPlay={(video, index) => {
+                    // Queue video in the INACTIVE player and immediately fade to it
+                    const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
+                    const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
+                    console.log(`[Play] Loading "${video.title}" into Player ${inactivePlayer} and fading`);
+                    if (inactivePlayer === 1) {
+                      setPlayer1Video(video);
+                      setRestoredVideoIds(prev => ({ ...prev, player1: null })); // null = autoplay
+                    } else {
+                      setPlayer2Video(video);
+                      setRestoredVideoIds(prev => ({ ...prev, player2: null })); // null = autoplay
+                    }
+                    // Set playlist mode
+                    setActivePlaylist(viewingPlaylist);
+                    setPlaylistMode(true);
+                    setAutoPlayEnabled(true);
+                    // Start fade after a short delay to let the video load
+                    setTimeout(() => {
+                      skipToNextWithFade();
+                    }, 500);
                   }}
                 />
               ) : (
