@@ -23,7 +23,7 @@ class DatabaseSeeder extends Seeder
 
             // Create a default playlist for each user
             Playlist::create([
-                'name' => 'My Playlist',
+                'name' => $user->name . "'s Playlist",
                 'user_id' => $user->id,
                 'is_public' => false,
             ]);
