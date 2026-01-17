@@ -1757,6 +1757,11 @@ function App() {
                       </span>
                     </div>
                   )}
+
+                  {/* Crossfader */}
+                  <div className="pt-3 mt-3 border-t border-white/10">
+                    <Crossfader value={crossfadeValue} onChange={setCrossfadeValue} />
+                  </div>
                 </div>
               </div>
 
@@ -1785,27 +1790,6 @@ function App() {
                 onStateUpdate={handlePlayerStateUpdate}
                 autoStart={player2Video?.youtube_id !== restoredVideoIds.player2}
               />
-
-              {/* Crossfader */}
-              <div className="bg-white/5 backdrop-blur rounded-xl p-3 border border-white/10">
-                <div className="flex items-center justify-center gap-3">
-                  <Crossfader value={crossfadeValue} onChange={setCrossfadeValue} />
-                  <button
-                    onClick={skipToNextWithFade}
-                    disabled={isAutoFading}
-                    className={`p-2 rounded-lg transition-all ${
-                      !isAutoFading
-                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500'
-                        : 'bg-white/10 text-white/30 cursor-not-allowed'
-                    }`}
-                    title="Crossfade to other player (8s)"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
 
