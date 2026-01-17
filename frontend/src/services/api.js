@@ -150,6 +150,11 @@ export const searchYouTube = async (query) => {
   return response.data;
 };
 
+export const getYouTubeVideo = async (videoId) => {
+  const response = await api.get('/youtube/video', { params: { id: videoId } });
+  return response.data;
+};
+
 export const importYouTubeVideo = async (video) => {
   const response = await api.post('/youtube/import', {
     youtube_id: video.youtube_id,
@@ -157,6 +162,32 @@ export const importYouTubeVideo = async (video) => {
     thumbnail_url: video.thumbnail_url,
   });
   return response.data;
+};
+
+// Helper to extract YouTube video ID from various URL formats
+export const extractYouTubeVideoId = (input) => {
+  // Patterns for YouTube URLs
+  const patterns = [
+    // Standard watch URL: https://www.youtube.com/watch?v=VIDEO_ID
+    /(?:youtube\.com\/watch\?v=|youtube\.com\/watch\?.+&v=)([a-zA-Z0-9_-]{11})/,
+    // Short URL: https://youtu.be/VIDEO_ID
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+    // Embed URL: https://www.youtube.com/embed/VIDEO_ID
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+    // Mobile URL: https://m.youtube.com/watch?v=VIDEO_ID
+    /m\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
+    // YouTube Music: https://music.youtube.com/watch?v=VIDEO_ID
+    /music\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = input.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
 };
 
 export default api;

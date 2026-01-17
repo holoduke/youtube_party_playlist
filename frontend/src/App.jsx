@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate } from 'react-router-dom';
-import { getCategories, getVideos, getPlaylists, getPlaylist, addVideoToPlaylist, goLivePlaylist, searchYouTube, importYouTubeVideo } from './services/api';
+import { getCategories, getVideos, getPlaylists, getPlaylist, addVideoToPlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId } from './services/api';
 import { initEcho, broadcastState } from './services/playerSync';
 import { useUser } from './contexts/UserContext';
 import CategoryFilter from './components/CategoryFilter';
@@ -163,7 +163,7 @@ function App() {
     setPlaylistDropZoneActive(false);
   };
 
-  // YouTube search handler with debounce
+  // YouTube search handler with debounce and URL detection
   const handleYoutubeSearchInput = (value) => {
     setYoutubeSearchQuery(value);
 
@@ -184,10 +184,21 @@ function App() {
     setShowYoutubeDropdown(true);
     youtubeSearchTimeoutRef.current = setTimeout(async () => {
       try {
-        const results = await searchYouTube(value);
-        setYoutubeSearchResults(results);
+        // Check if input is a YouTube URL
+        const videoId = extractYouTubeVideoId(value);
+
+        if (videoId) {
+          // Fetch single video by ID
+          const video = await getYouTubeVideo(videoId);
+          setYoutubeSearchResults(video ? [video] : []);
+        } else {
+          // Regular search
+          const results = await searchYouTube(value);
+          setYoutubeSearchResults(results);
+        }
       } catch (error) {
         console.error('YouTube search failed:', error);
+        setYoutubeSearchResults([]);
       }
       setYoutubeSearchLoading(false);
     }, 300);

@@ -41,6 +41,43 @@ class YouTubeController extends Controller
         }
     }
 
+    public function getVideo(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|string',
+        ]);
+
+        try {
+            $videoId = $request->id;
+
+            // Check if already in database
+            $existing = Video::where('youtube_id', $videoId)->first();
+            if ($existing) {
+                return response()->json([
+                    'youtube_id' => $existing->youtube_id,
+                    'title' => $existing->title,
+                    'thumbnail_url' => $existing->thumbnail_url,
+                    'in_database' => true,
+                    'database_id' => $existing->id,
+                ]);
+            }
+
+            // Fetch from YouTube API
+            $video = $this->youtube->getVideoDetails($videoId);
+
+            if (!$video) {
+                return response()->json(['error' => 'Video not found'], 404);
+            }
+
+            $video['in_database'] = false;
+            $video['database_id'] = null;
+
+            return response()->json($video);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
     public function import(Request $request)
     {
         $request->validate([

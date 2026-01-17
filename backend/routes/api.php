@@ -39,6 +39,7 @@ Route::post('/playlists/{shareCode}/like', [PlaylistController::class, 'likeVide
 
 // YouTube search/import
 Route::get('/youtube/search', [YouTubeController::class, 'search']);
+Route::get('/youtube/video', [YouTubeController::class, 'getVideo']);
 Route::post('/youtube/import', [YouTubeController::class, 'import']);
 
 // Player sync routes (for remote display)
