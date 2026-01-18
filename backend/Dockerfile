@@ -1,5 +1,5 @@
 # Backend Dockerfile for Laravel
-FROM php:8.3-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 # Install system dependencies
 RUN apk add --no-cache \
