@@ -15,7 +15,8 @@ export default function BroadcastViewer() {
   const [isEnded, setIsEnded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [debugInfo, setDebugInfo] = useState({});
-  const [needsInteraction, setNeedsInteraction] = useState(true);
+  const [needsInteraction, setNeedsInteraction] = useState(false); // Set to true if autoplay fails
+  const [hasReceivedState, setHasReceivedState] = useState(false);
   const [startedAt, setStartedAt] = useState(null);
   const [fadeTrigger, setFadeTrigger] = useState(null);
 
@@ -91,6 +92,7 @@ export default function BroadcastViewer() {
         // Update individual player playing states
         setPlayer1Playing(serverPlayer1Playing);
         setPlayer2Playing(serverPlayer2Playing);
+        setHasReceivedState(true);
 
         // Check for new fade trigger from DJ app
         const serverFadeTrigger = serverState.fade_trigger;
@@ -337,6 +339,9 @@ export default function BroadcastViewer() {
 
   // Playback control - each player controlled independently based on DJ app state
   useEffect(() => {
+    // Don't control playback until we've received state from server
+    if (!hasReceivedState) return;
+
     console.log('Player 1 playback effect, playing:', player1Playing);
 
     const controlPlayer = () => {
@@ -372,9 +377,12 @@ export default function BroadcastViewer() {
     // Keep checking and retrying
     const interval = setInterval(controlPlayer, 1000);
     return () => clearInterval(interval);
-  }, [player1Playing, player1Video]);
+  }, [player1Playing, player1Video, hasReceivedState]);
 
   useEffect(() => {
+    // Don't control playback until we've received state from server
+    if (!hasReceivedState) return;
+
     console.log('Player 2 playback effect, playing:', player2Playing);
 
     const controlPlayer = () => {
@@ -410,7 +418,7 @@ export default function BroadcastViewer() {
     // Keep checking and retrying
     const interval = setInterval(controlPlayer, 1000);
     return () => clearInterval(interval);
-  }, [player2Playing, player2Video]);
+  }, [player2Playing, player2Video, hasReceivedState]);
 
   const opts = {
     width: '100%',
