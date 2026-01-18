@@ -471,11 +471,15 @@ export default function BroadcastViewer() {
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
-      {/* Simple header */}
-      <div className="absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-black/60 to-transparent p-4">
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-          <span className="text-white font-medium">{playlistName}</span>
+      {/* Broadcast icon */}
+      <div className="absolute top-4 left-4 z-30">
+        <div className="flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-2">
+          <svg className="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2" />
+            <polyline points="17,2 12,7 7,2" />
+            <circle cx="12" cy="14" r="2" fill="currentColor" />
+          </svg>
+          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
         </div>
       </div>
 
