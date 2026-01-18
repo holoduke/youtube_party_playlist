@@ -10,8 +10,8 @@ export default function BroadcastViewer() {
   const [player2Video, setPlayer2Video] = useState(null);
   const [player1Playing, setPlayer1Playing] = useState(false);
   const [player2Playing, setPlayer2Playing] = useState(false);
-  const [crossfadeValue, setCrossfadeValue] = useState(0);
-  const [animatedCrossfade, setAnimatedCrossfade] = useState(0); // Smoothly animated value
+  const [crossfadeValue, setCrossfadeValue] = useState(50);
+  const [animatedCrossfade, setAnimatedCrossfade] = useState(50); // Smoothly animated value
   const [isEnded, setIsEnded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [debugInfo, setDebugInfo] = useState({});
@@ -27,7 +27,7 @@ export default function BroadcastViewer() {
   const player2PlayingRef = useRef(false);
   const prevPlayer1PlayingRef = useRef(false);
   const prevPlayer2PlayingRef = useRef(false);
-  const crossfadeRef = useRef(0);
+  const crossfadeRef = useRef(50);
   const startedAtRef = useRef(null);
   const fadeAnimationRef = useRef(null);
   const lastFadeTriggerRef = useRef(null);
