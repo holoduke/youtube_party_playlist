@@ -22,6 +22,13 @@ fi
 echo "Running database migrations..."
 php artisan migrate --force
 
+# Seed database if empty (first deploy only)
+USER_COUNT=$(php artisan tinker --execute="echo App\Models\User::count();" 2>/dev/null | tail -1)
+if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
+    echo "Seeding database with default data..."
+    php artisan db:seed --force
+fi
+
 # Cache configuration for production (skip if APP_KEY not set)
 if [ "$APP_ENV" = "production" ] && [ -n "$APP_KEY" ]; then
     echo "Caching configuration..."
