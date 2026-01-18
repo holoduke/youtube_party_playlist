@@ -18,6 +18,7 @@ export default function BroadcastViewer() {
   const pollIntervalRef = useRef(null);
   const currentVideoIdRef = useRef(null);
   const isPlayingRef = useRef(false);
+  const startedAtRef = useRef(null);
 
   // Keep ref in sync
   useEffect(() => {
@@ -60,8 +61,9 @@ export default function BroadcastViewer() {
           setIsPlaying(serverIsPlaying);
         }
 
-        // Update started_at
+        // Update started_at (ref for effect, state for debug display)
         const serverStartedAt = serverState.started_at;
+        startedAtRef.current = serverStartedAt;
         setStartedAt(serverStartedAt);
 
         // Calculate elapsed time since video started
@@ -105,9 +107,9 @@ export default function BroadcastViewer() {
       const timer = setTimeout(() => {
         try {
           if (playerRef.current) {
-            // Seek to correct position based on when video started
-            if (startedAt) {
-              const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+            // Seek to correct position based on when video started (use ref to avoid re-runs)
+            if (startedAtRef.current) {
+              const elapsedSeconds = Math.floor((Date.now() - startedAtRef.current) / 1000);
               if (elapsedSeconds > 2) {
                 playerRef.current.seekTo(elapsedSeconds, true);
               }
@@ -126,7 +128,7 @@ export default function BroadcastViewer() {
         // Player not ready
       }
     }
-  }, [isPlaying, currentVideo, startedAt]);
+  }, [isPlaying, currentVideo]);
 
   const opts = {
     width: '100%',
@@ -149,8 +151,8 @@ export default function BroadcastViewer() {
     playerRef.current.setVolume(100);
 
     // Seek to correct position based on when video started
-    if (startedAt && isPlayingRef.current) {
-      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    if (startedAtRef.current && isPlayingRef.current) {
+      const elapsedSeconds = Math.floor((Date.now() - startedAtRef.current) / 1000);
       if (elapsedSeconds > 2) {
         playerRef.current.seekTo(elapsedSeconds, true);
       }
