@@ -785,25 +785,15 @@ function App() {
       ? videos.findIndex(v => v.id === player2Video.id)
       : -1;
 
-    // Calculate next index for the player that just ended
+    // Calculate next index for the player that just ended (cycle back to beginning)
     const currentIndex = playerNumber === 1 ? player1CurrentIndex : player2CurrentIndex;
-    const nextIndex = currentIndex + 2;
+    const nextIndex = (currentIndex + 2) % videos.length;
 
-    if (nextIndex < videos.length) {
-      // Load next track for this player
-      if (playerNumber === 1) {
-        setPlayer1Video(videos[nextIndex]);
-      } else {
-        setPlayer2Video(videos[nextIndex]);
-      }
+    // Load next track for this player (cycles through playlist)
+    if (playerNumber === 1) {
+      setPlayer1Video(videos[nextIndex]);
     } else {
-      // No more tracks for this player
-      // Check if the other player still has content playing
-      const otherPlayerIndex = playerNumber === 1 ? player2CurrentIndex : player1CurrentIndex;
-      if (otherPlayerIndex < 0 || otherPlayerIndex >= videos.length - 1) {
-        // Playlist ended
-        setPlaylistMode(false);
-      }
+      setPlayer2Video(videos[nextIndex]);
     }
   }, [playlistMode, activePlaylist, player1Video, player2Video]);
 
@@ -906,12 +896,12 @@ function App() {
       return;
     }
 
-    // Check if the inactive player has the correct "next" video
+    // Check if the inactive player has the correct "next" video (cycles through playlist)
     if (playlistVideos.length > 0) {
       const activeIndex = playlistVideos.findIndex(v => v.id === activeVideo?.id);
-      const nextIndex = activeIndex + 1;
+      const nextIndex = (activeIndex + 1) % playlistVideos.length;
 
-      if (activeIndex >= 0 && nextIndex < playlistVideos.length) {
+      if (activeIndex >= 0) {
         const expectedNextVideo = playlistVideos[nextIndex];
 
         // If inactive player doesn't have the correct next video, load it
@@ -1036,12 +1026,12 @@ function App() {
           finishedPlayerRef.current.pause();
         }
 
-        // Load next video if auto-queue is enabled
+        // Load next video if auto-queue is enabled (cycles through playlist)
         // Find the video that just started playing (the active player after fade)
         const activePlayer = fadingToPlayer2 ? 2 : 1;
         const nowPlayingVideo = fadingToPlayer2 ? player2Video : player1Video;
         const nowPlayingIndex = autoPlayVideos.findIndex(v => v.id === nowPlayingVideo?.id);
-        const nextIndex = nowPlayingIndex + 1;
+        const nextIndex = autoPlayVideos.length > 0 ? (nowPlayingIndex + 1) % autoPlayVideos.length : -1;
 
         console.log('[Auto-Queue Check]', {
           autoQueueEnabled,
@@ -1050,30 +1040,26 @@ function App() {
           nowPlayingVideo: nowPlayingVideo?.title,
           nowPlayingIndex,
           nextIndex,
-          hasNextVideo: nextIndex >= 0 && nextIndex < autoPlayVideos.length
+          cycling: nextIndex < nowPlayingIndex
         });
 
         if (autoQueueEnabled && autoPlayVideos.length > 0 && nowPlayingIndex >= 0) {
-          if (nextIndex < autoPlayVideos.length) {
-            console.log(`[Auto-Queue] Will load video at index ${nextIndex} into Player ${finishedPlayer} after 1s delay`);
-            if (loadNextVideoTimeoutRef.current) {
-              clearTimeout(loadNextVideoTimeoutRef.current);
-            }
-            loadNextVideoTimeoutRef.current = setTimeout(() => {
-              loadNextVideoTimeoutRef.current = null;
-              const nextVideo = autoPlayVideos[nextIndex];
-              console.log(`[Auto-Queue] Loading "${nextVideo?.title}" into Player ${finishedPlayer}`);
-              if (finishedPlayer === 1) {
-                setPlayer1Video(nextVideo);
-                setRestoredVideoIds(prev => ({ ...prev, player1: nextVideo.youtube_id }));
-              } else {
-                setPlayer2Video(nextVideo);
-                setRestoredVideoIds(prev => ({ ...prev, player2: nextVideo.youtube_id }));
-              }
-            }, 1000);
-          } else {
-            console.log('[Auto-Queue] No more videos in playlist');
+          console.log(`[Auto-Queue] Will load video at index ${nextIndex} into Player ${finishedPlayer} after 1s delay`);
+          if (loadNextVideoTimeoutRef.current) {
+            clearTimeout(loadNextVideoTimeoutRef.current);
           }
+          loadNextVideoTimeoutRef.current = setTimeout(() => {
+            loadNextVideoTimeoutRef.current = null;
+            const nextVideo = autoPlayVideos[nextIndex];
+            console.log(`[Auto-Queue] Loading "${nextVideo?.title}" into Player ${finishedPlayer}`);
+            if (finishedPlayer === 1) {
+              setPlayer1Video(nextVideo);
+              setRestoredVideoIds(prev => ({ ...prev, player1: nextVideo.youtube_id }));
+            } else {
+              setPlayer2Video(nextVideo);
+              setRestoredVideoIds(prev => ({ ...prev, player2: nextVideo.youtube_id }));
+            }
+          }, 1000);
         } else {
           console.log('[Auto-Queue] Skipped -', !autoQueueEnabled ? 'auto-queue disabled' : nowPlayingIndex < 0 ? 'playing video not in playlist' : 'playlist empty');
         }
