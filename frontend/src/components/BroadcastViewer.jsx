@@ -295,19 +295,43 @@ export default function BroadcastViewer() {
     };
   }, [fadeTrigger, crossfadeValue]);
 
-  // Clear refs when videos change (component will be recreated)
+  // Load video via API when video changes (no re-render needed)
   useEffect(() => {
-    // When player1Video changes, the YouTube component will remount
-    // Clear the ref so we don't try to control a destroyed player
-    return () => {
-      player1Ref.current = null;
-    };
+    if (player1Ref.current && player1Video?.youtube_id) {
+      const currentVideoId = player1VideoIdRef.current;
+      if (currentVideoId !== player1Video.youtube_id) {
+        console.log('Player 1: loading new video via API:', player1Video.youtube_id);
+        player1VideoIdRef.current = player1Video.youtube_id;
+        try {
+          if (player1PlayingRef.current) {
+            player1Ref.current.loadVideoById(player1Video.youtube_id);
+          } else {
+            player1Ref.current.cueVideoById(player1Video.youtube_id);
+          }
+        } catch (e) {
+          console.log('Player 1 loadVideo error:', e);
+        }
+      }
+    }
   }, [player1Video?.youtube_id]);
 
   useEffect(() => {
-    return () => {
-      player2Ref.current = null;
-    };
+    if (player2Ref.current && player2Video?.youtube_id) {
+      const currentVideoId = player2VideoIdRef.current;
+      if (currentVideoId !== player2Video.youtube_id) {
+        console.log('Player 2: loading new video via API:', player2Video.youtube_id);
+        player2VideoIdRef.current = player2Video.youtube_id;
+        try {
+          if (player2PlayingRef.current) {
+            player2Ref.current.loadVideoById(player2Video.youtube_id);
+          } else {
+            player2Ref.current.cueVideoById(player2Video.youtube_id);
+          }
+        } catch (e) {
+          console.log('Player 2 loadVideo error:', e);
+        }
+      }
+    }
   }, [player2Video?.youtube_id]);
 
   // Playback control - each player controlled independently based on DJ app state
@@ -499,28 +523,21 @@ export default function BroadcastViewer() {
 
       {/* Dual video players - fullscreen overlapping */}
       <div className="absolute inset-0">
-        {/* Player 1 - base layer, always visible */}
+        {/* Player 1 - base layer */}
         <div
           className="absolute inset-0 z-10"
           style={{ opacity: Math.max(0.01, (100 - animatedCrossfade) / 100) }}
         >
-          {player1Video && (
-            <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
-              <YouTube
-                key={`p1-${player1Video.youtube_id}`}
-                videoId={player1Video.youtube_id}
-                opts={opts}
-                onReady={onPlayer1Ready}
-                className="!w-full !h-full"
-                iframeClassName="!w-full !h-full !absolute !inset-0"
-              />
-            </div>
-          )}
-          {!player1Video && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black">
-              <span className="text-white/30">Waiting for video...</span>
-            </div>
-          )}
+          <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
+            <YouTube
+              key="player1"
+              videoId={player1Video?.youtube_id || ''}
+              opts={opts}
+              onReady={onPlayer1Ready}
+              className="!w-full !h-full"
+              iframeClassName="!w-full !h-full !absolute !inset-0"
+            />
+          </div>
         </div>
 
         {/* Player 2 - overlay layer, opacity controlled by crossfade */}
@@ -528,18 +545,16 @@ export default function BroadcastViewer() {
           className="absolute inset-0 z-20"
           style={{ opacity: Math.max(0.01, animatedCrossfade / 100) }}
         >
-          {player2Video && (
-            <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
-              <YouTube
-                key={`p2-${player2Video.youtube_id}`}
-                videoId={player2Video.youtube_id}
-                opts={opts}
-                onReady={onPlayer2Ready}
-                className="!w-full !h-full"
-                iframeClassName="!w-full !h-full !absolute !inset-0"
-              />
-            </div>
-          )}
+          <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
+            <YouTube
+              key="player2"
+              videoId={player2Video?.youtube_id || ''}
+              opts={opts}
+              onReady={onPlayer2Ready}
+              className="!w-full !h-full"
+              iframeClassName="!w-full !h-full !absolute !inset-0"
+            />
+          </div>
         </div>
       </div>
 
