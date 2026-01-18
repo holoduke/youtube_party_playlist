@@ -661,33 +661,43 @@ function App() {
         const state = playlist.state;
         if (state) {
           // Restore videos to players
-          if (state.current_video) {
-            setPlayer1Video(state.current_video);
+          if (state.player1_video) {
+            setPlayer1Video(state.player1_video);
           }
-          if (state.next_video) {
-            setPlayer2Video(state.next_video);
+          if (state.player2_video) {
+            setPlayer2Video(state.player2_video);
           }
           // Restore crossfade
           if (state.crossfade_value !== undefined) {
             setCrossfadeValue(state.crossfade_value);
           }
-          // Calculate elapsed time and seek if was playing
-          if (state.is_playing && state.started_at && state.current_video) {
-            const elapsedSeconds = Math.floor((Date.now() - state.started_at) / 1000);
+          // Restore playback position and state for both players
+          const shouldRestorePlayer1 = state.player1_video && (state.player1_playing || state.player1_time > 0);
+          const shouldRestorePlayer2 = state.player2_video && (state.player2_playing || state.player2_time > 0);
+
+          if (shouldRestorePlayer1 || shouldRestorePlayer2) {
             videoStartedAtRef.current = state.started_at;
-            // Schedule seek after player is ready
+            // Schedule seek after players are ready
             setTimeout(() => {
               try {
-                // Determine which player is active based on crossfade
-                const activePlayer = (state.crossfade_value ?? 50) <= 50 ? player1Ref.current : player2Ref.current;
-                if (activePlayer) {
-                  activePlayer.seekTo(elapsedSeconds, true);
-                  activePlayer.playVideo();
+                if (shouldRestorePlayer1 && player1Ref.current) {
+                  const seekTime = state.player1_time || 0;
+                  player1Ref.current.seekTo(seekTime, true);
+                  if (state.player1_playing) {
+                    player1Ref.current.playVideo();
+                  }
+                }
+                if (shouldRestorePlayer2 && player2Ref.current) {
+                  const seekTime = state.player2_time || 0;
+                  player2Ref.current.seekTo(seekTime, true);
+                  if (state.player2_playing) {
+                    player2Ref.current.playVideo();
+                  }
                 }
               } catch (e) {
                 console.error('Failed to restore playback position:', e);
               }
-            }, 1000);
+            }, 1500);
           }
         }
       } else {
