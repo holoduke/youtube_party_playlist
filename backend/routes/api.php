@@ -47,6 +47,7 @@ Route::post('/playlists/{playlist}/start-broadcast', [PlaylistController::class,
 Route::post('/playlists/{playlist}/stop-broadcast', [PlaylistController::class, 'stopBroadcast']);
 Route::post('/playlists/{playlist}/broadcast-sync', [PlaylistController::class, 'broadcastSync']);
 Route::get('/broadcast/{hash}', [PlaylistController::class, 'getBroadcastState']);
+Route::get('/broadcast/code/{code}', [PlaylistController::class, 'getBroadcastByCode']);
 
 // YouTube search/import
 Route::get('/youtube/search', [YouTubeController::class, 'search']);

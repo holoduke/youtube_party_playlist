@@ -5,12 +5,14 @@ export default function BroadcastModal({
   onClose,
   playlistName,
   broadcastHash,
+  broadcastCode,
   onStopBroadcast,
   showNotification,
 }) {
   if (!isOpen) return null;
 
   const broadcastUrl = `${window.location.origin}/broadcast/${broadcastHash}`;
+  const codeEntryUrl = `${window.location.origin}/broadcast`;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
@@ -40,10 +42,21 @@ export default function BroadcastModal({
               <span className="text-red-400 font-bold uppercase tracking-wide">Broadcasting</span>
             </div>
             <h2 className="text-2xl font-bold text-white">{playlistName}</h2>
-            <p className="text-purple-200/70 text-sm mt-1">
-              Share this link with viewers
-            </p>
           </div>
+
+          {/* 4-digit Code - Large and prominent */}
+          {broadcastCode && (
+            <div className="mb-6">
+              <p className="text-purple-200/70 text-sm mb-2">
+                Go to <span className="text-white font-mono">{codeEntryUrl}</span> and enter code:
+              </p>
+              <div className="bg-black/40 rounded-2xl p-4 inline-block">
+                <p className="text-6xl font-bold text-white tracking-[0.3em] font-mono">
+                  {broadcastCode}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* QR Code */}
           <div className="bg-white p-4 rounded-2xl inline-block mb-4">

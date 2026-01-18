@@ -189,6 +189,12 @@ export const getBroadcastState = async (hash) => {
   return response.data;
 };
 
+// Lookup broadcast by 4-digit code
+export const getBroadcastByCode = async (code) => {
+  const response = await api.get(`/broadcast/code/${code}`);
+  return response.data;
+};
+
 // ==================== YouTube API ====================
 
 export const searchYouTube = async (query) => {

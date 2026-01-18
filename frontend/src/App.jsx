@@ -35,7 +35,7 @@ function App() {
 
   // View mode: 'categories' or 'playlist' (synced with URL param 'view')
   const urlViewMode = searchParams.get('view');
-  const viewMode = urlViewMode === 'playlist' ? 'playlist' : 'categories';
+  const viewMode = urlViewMode === 'categories' ? 'categories' : 'playlist';
   const setViewMode = (mode, playlistHash = null) => {
     setSearchParams(() => {
       const newParams = new URLSearchParams();
@@ -69,6 +69,7 @@ function App() {
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [broadcastHash, setBroadcastHash] = useState(null);
+  const [broadcastCode, setBroadcastCode] = useState(null);
   const broadcastSyncTimeoutRef = useRef(null);
   const videoStartedAtRef = useRef(null); // Timestamp when current video started playing
 
@@ -1511,11 +1512,13 @@ function App() {
         onClose={() => setShowBroadcastModal(false)}
         playlistName={selectedPlaylist?.name || ''}
         broadcastHash={broadcastHash}
+        broadcastCode={broadcastCode}
         onStopBroadcast={async () => {
           try {
             await stopBroadcast(selectedPlaylist.id);
             setIsBroadcasting(false);
             setBroadcastHash(null);
+            setBroadcastCode(null);
             setShowBroadcastModal(false);
             showNotification('Broadcast stopped');
           } catch (error) {
@@ -1877,6 +1880,7 @@ function App() {
                             const result = await startBroadcast(selectedPlaylist.id);
                             setIsBroadcasting(true);
                             setBroadcastHash(result.hash);
+                            setBroadcastCode(result.broadcast_code);
                             setShowBroadcastModal(true);
                           } catch (error) {
                             console.error('Failed to start broadcast:', error);

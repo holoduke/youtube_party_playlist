@@ -337,8 +337,11 @@ class PlaylistController extends Controller
     // POST /api/playlists/{playlist}/start-broadcast - Start broadcasting
     public function startBroadcast(Playlist $playlist)
     {
+        $broadcastCode = Playlist::generateBroadcastCode();
+
         $playlist->update([
             'is_broadcasting' => true,
+            'broadcast_code' => $broadcastCode,
             'state' => [
                 'current_video' => null,
                 'next_video' => null,
@@ -351,6 +354,7 @@ class PlaylistController extends Controller
             'success' => true,
             'broadcast_url' => "/broadcast/{$playlist->hash}",
             'hash' => $playlist->hash,
+            'broadcast_code' => $broadcastCode,
         ]);
     }
 
@@ -359,10 +363,32 @@ class PlaylistController extends Controller
     {
         $playlist->update([
             'is_broadcasting' => false,
+            'broadcast_code' => null,
             'state' => null,
         ]);
 
         return response()->json(['success' => true]);
+    }
+
+    // GET /api/broadcast/code/{code} - Lookup broadcast by 4-digit code
+    public function getBroadcastByCode(string $code)
+    {
+        $playlist = Playlist::where('broadcast_code', $code)
+            ->where('is_broadcasting', true)
+            ->first();
+
+        if (!$playlist) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Broadcast not found or ended',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'hash' => $playlist->hash,
+            'broadcast_url' => "/broadcast/{$playlist->hash}",
+        ]);
     }
 
     // POST /api/playlists/{playlist}/broadcast-sync - Sync broadcast state

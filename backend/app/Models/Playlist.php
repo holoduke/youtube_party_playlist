@@ -13,6 +13,7 @@ class Playlist extends Model
         'user_id',
         'is_public',
         'is_broadcasting',
+        'broadcast_code',
         'status',
         'share_code',
         'host_code',
@@ -99,6 +100,16 @@ class Playlist extends Model
         return $this->belongsToMany(Video::class)
             ->withPivot('position')
             ->orderBy('pivot_position');
+    }
+
+    // Generate a unique 4-digit broadcast code
+    public static function generateBroadcastCode(): string
+    {
+        do {
+            $code = str_pad(random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+        } while (self::where('broadcast_code', $code)->exists());
+
+        return $code;
     }
 
     // Generate a unique share code (6 chars for guests)
