@@ -503,19 +503,13 @@ export default function BroadcastViewer() {
         </div>
       </div>
 
-      {/* Dual video players - side by side for debugging */}
-      <div className="absolute inset-0 flex">
-        {/* Player 1 - opacity decreases as crossfade increases */}
-        {/* Opacity driven by animatedCrossfade for smooth sync with volume */}
+      {/* Dual video players - fullscreen overlapping */}
+      <div className="absolute inset-0">
+        {/* Player 1 - base layer, always visible */}
         <div
-          className="w-1/2 h-full relative border-r-2 border-yellow-500"
+          className="absolute inset-0 z-10"
           style={{ opacity: Math.max(0.01, (100 - animatedCrossfade) / 100) }}
         >
-          <div className="absolute top-2 left-2 right-2 z-10 bg-black/80 text-yellow-400 px-2 py-1 text-sm">
-            <div className="font-bold">PLAYER 1 - Opacity: {Math.round(100 - animatedCrossfade)}%</div>
-            <div className="text-xs text-yellow-300 truncate">{player1Video?.title || 'No video'}</div>
-            <div className="text-[10px] text-yellow-300/60">{player1Video?.youtube_id || '-'}</div>
-          </div>
           {player1Video && (
             <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
               <YouTube
@@ -529,23 +523,17 @@ export default function BroadcastViewer() {
             </div>
           )}
           {!player1Video && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-              <span className="text-yellow-400/50">No video loaded</span>
+            <div className="absolute inset-0 flex items-center justify-center bg-black">
+              <span className="text-white/30">Waiting for video...</span>
             </div>
           )}
         </div>
 
-        {/* Player 2 - opacity increases as crossfade increases */}
-        {/* Opacity driven by animatedCrossfade for smooth sync with volume */}
+        {/* Player 2 - overlay layer, opacity controlled by crossfade */}
         <div
-          className="w-1/2 h-full relative border-l-2 border-cyan-500"
+          className="absolute inset-0 z-20"
           style={{ opacity: Math.max(0.01, animatedCrossfade / 100) }}
         >
-          <div className="absolute top-2 left-2 right-2 z-10 bg-black/80 text-cyan-400 px-2 py-1 text-sm">
-            <div className="font-bold">PLAYER 2 - Opacity: {animatedCrossfade}%</div>
-            <div className="text-xs text-cyan-300 truncate">{player2Video?.title || 'No video'}</div>
-            <div className="text-[10px] text-cyan-300/60">{player2Video?.youtube_id || '-'}</div>
-          </div>
           {player2Video && (
             <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
               <YouTube
@@ -556,11 +544,6 @@ export default function BroadcastViewer() {
                 className="!w-full !h-full"
                 iframeClassName="!w-full !h-full !absolute !inset-0"
               />
-            </div>
-          )}
-          {!player2Video && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-              <span className="text-cyan-400/50">No video loaded</span>
             </div>
           )}
         </div>
