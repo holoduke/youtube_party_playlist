@@ -403,30 +403,37 @@ export default function BroadcastViewer() {
     },
   };
 
+  const safePlayerCall = (playerRef, method, ...args) => {
+    try {
+      if (playerRef.current && typeof playerRef.current[method] === 'function') {
+        playerRef.current[method](...args);
+      }
+    } catch (e) {
+      // Player was destroyed, ignore
+    }
+  };
+
   const onPlayer1Ready = (event) => {
     console.log('Player 1 ready, djPlaying:', player1PlayingRef.current, 'crossfade:', crossfadeRef.current);
     player1Ref.current = event.target;
 
     // Always start playing (muted autoplay is allowed)
-    player1Ref.current.playVideo();
+    safePlayerCall(player1Ref, 'playVideo');
 
     // Unmute after short delay and set volume
     setTimeout(() => {
-      if (player1Ref.current) {
-        player1Ref.current.unMute();
-        player1Ref.current.setVolume(100 - crossfadeRef.current);
-        // Try play again after unmute
-        player1Ref.current.playVideo();
-      }
+      safePlayerCall(player1Ref, 'unMute');
+      safePlayerCall(player1Ref, 'setVolume', 100 - crossfadeRef.current);
+      safePlayerCall(player1Ref, 'playVideo');
     }, 300);
 
     // Keep trying to play for a few seconds (in case of timing issues)
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 3; i++) {
       setTimeout(() => {
-        if (player1Ref.current && player1PlayingRef.current) {
-          player1Ref.current.playVideo();
+        if (player1PlayingRef.current) {
+          safePlayerCall(player1Ref, 'playVideo');
         }
-      }, i * 500);
+      }, i * 1000);
     }
   };
 
@@ -435,25 +442,22 @@ export default function BroadcastViewer() {
     player2Ref.current = event.target;
 
     // Always start playing (muted autoplay is allowed)
-    player2Ref.current.playVideo();
+    safePlayerCall(player2Ref, 'playVideo');
 
     // Unmute after short delay and set volume
     setTimeout(() => {
-      if (player2Ref.current) {
-        player2Ref.current.unMute();
-        player2Ref.current.setVolume(crossfadeRef.current);
-        // Try play again after unmute
-        player2Ref.current.playVideo();
-      }
+      safePlayerCall(player2Ref, 'unMute');
+      safePlayerCall(player2Ref, 'setVolume', crossfadeRef.current);
+      safePlayerCall(player2Ref, 'playVideo');
     }, 300);
 
     // Keep trying to play for a few seconds (in case of timing issues)
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 3; i++) {
       setTimeout(() => {
-        if (player2Ref.current && player2PlayingRef.current) {
-          player2Ref.current.playVideo();
+        if (player2PlayingRef.current) {
+          safePlayerCall(player2Ref, 'playVideo');
         }
-      }, i * 500);
+      }, i * 1000);
     }
   };
 
