@@ -1,14 +1,21 @@
 #!/bin/sh
 set -e
 
-# Create database if it doesn't exist
+# Create .env file from example if it doesn't exist
+if [ ! -f /var/www/.env ]; then
+    echo "Creating .env file from .env.example..."
+    cp /var/www/.env.example /var/www/.env
+fi
+
+# Create database directory and file if they don't exist
+mkdir -p /var/www/database
 if [ ! -f /var/www/database/database.sqlite ]; then
     echo "Creating SQLite database..."
     touch /var/www/database/database.sqlite
 fi
 
 # Set permissions
-chown -R www-data:www-data /var/www/database
+chown -R www-data:www-data /var/www/database /var/www/storage /var/www/bootstrap/cache
 chmod -R 755 /var/www/storage /var/www/bootstrap/cache
 
 # Generate app key if not set
