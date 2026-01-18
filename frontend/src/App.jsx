@@ -655,9 +655,45 @@ function App() {
       if (playlist.is_broadcasting) {
         setIsBroadcasting(true);
         setBroadcastHash(playlist.hash);
+        setBroadcastCode(playlist.broadcast_code);
+
+        // Restore playback state from broadcast
+        const state = playlist.state;
+        if (state) {
+          // Restore videos to players
+          if (state.current_video) {
+            setPlayer1Video(state.current_video);
+          }
+          if (state.next_video) {
+            setPlayer2Video(state.next_video);
+          }
+          // Restore crossfade
+          if (state.crossfade_value !== undefined) {
+            setCrossfadeValue(state.crossfade_value);
+          }
+          // Calculate elapsed time and seek if was playing
+          if (state.is_playing && state.started_at && state.current_video) {
+            const elapsedSeconds = Math.floor((Date.now() - state.started_at) / 1000);
+            videoStartedAtRef.current = state.started_at;
+            // Schedule seek after player is ready
+            setTimeout(() => {
+              try {
+                // Determine which player is active based on crossfade
+                const activePlayer = (state.crossfade_value ?? 50) <= 50 ? player1Ref.current : player2Ref.current;
+                if (activePlayer) {
+                  activePlayer.seekTo(elapsedSeconds, true);
+                  activePlayer.playVideo();
+                }
+              } catch (e) {
+                console.error('Failed to restore playback position:', e);
+              }
+            }, 1000);
+          }
+        }
       } else {
         setIsBroadcasting(false);
         setBroadcastHash(null);
+        setBroadcastCode(null);
       }
 
       // Only switch to playlist view mode if explicitly requested
