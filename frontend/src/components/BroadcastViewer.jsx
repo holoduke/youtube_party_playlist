@@ -407,22 +407,26 @@ export default function BroadcastViewer() {
     console.log('Player 1 ready, djPlaying:', player1PlayingRef.current, 'crossfade:', crossfadeRef.current);
     player1Ref.current = event.target;
 
-    // Start playing muted, then unmute after short delay
+    // Always start playing (muted autoplay is allowed)
     player1Ref.current.playVideo();
+
+    // Unmute after short delay and set volume
     setTimeout(() => {
       if (player1Ref.current) {
         player1Ref.current.unMute();
         player1Ref.current.setVolume(100 - crossfadeRef.current);
+        // Try play again after unmute
+        player1Ref.current.playVideo();
       }
-    }, 500);
+    }, 300);
 
-    // If DJ has this player paused, pause it after unmute
-    if (!player1PlayingRef.current) {
+    // Keep trying to play for a few seconds (in case of timing issues)
+    for (let i = 1; i <= 5; i++) {
       setTimeout(() => {
-        if (player1Ref.current && !player1PlayingRef.current) {
-          player1Ref.current.pauseVideo();
+        if (player1Ref.current && player1PlayingRef.current) {
+          player1Ref.current.playVideo();
         }
-      }, 600);
+      }, i * 500);
     }
   };
 
@@ -430,22 +434,26 @@ export default function BroadcastViewer() {
     console.log('Player 2 ready, djPlaying:', player2PlayingRef.current, 'crossfade:', crossfadeRef.current);
     player2Ref.current = event.target;
 
-    // Start playing muted, then unmute after short delay
+    // Always start playing (muted autoplay is allowed)
     player2Ref.current.playVideo();
+
+    // Unmute after short delay and set volume
     setTimeout(() => {
       if (player2Ref.current) {
         player2Ref.current.unMute();
         player2Ref.current.setVolume(crossfadeRef.current);
+        // Try play again after unmute
+        player2Ref.current.playVideo();
       }
-    }, 500);
+    }, 300);
 
-    // If DJ has this player paused, pause it after unmute
-    if (!player2PlayingRef.current) {
+    // Keep trying to play for a few seconds (in case of timing issues)
+    for (let i = 1; i <= 5; i++) {
       setTimeout(() => {
-        if (player2Ref.current && !player2PlayingRef.current) {
-          player2Ref.current.pauseVideo();
+        if (player2Ref.current && player2PlayingRef.current) {
+          player2Ref.current.playVideo();
         }
-      }, 600);
+      }, i * 500);
     }
   };
 
