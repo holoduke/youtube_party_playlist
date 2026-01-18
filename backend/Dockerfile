@@ -32,13 +32,14 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 # Copy application code
 COPY . .
 
-# Complete composer install
+# Create SQLite database file (directory already exists from COPY)
+RUN touch database/database.sqlite
+
+# Complete composer install with fresh autoload
 RUN composer dump-autoload --optimize
 
-# Create SQLite database directory and set permissions
-RUN mkdir -p database && \
-    touch database/database.sqlite && \
-    chown -R www-data:www-data /var/www && \
+# Set permissions
+RUN chown -R www-data:www-data /var/www && \
     chmod -R 755 /var/www/storage /var/www/bootstrap/cache
 
 # Copy nginx configuration
