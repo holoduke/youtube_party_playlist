@@ -387,8 +387,6 @@ export default function BroadcastViewer() {
     return () => clearInterval(interval);
   }, [player2Playing, player2Video]);
 
-  const [isMuted, setIsMuted] = useState(true);  // Start muted to allow autoplay
-
   const opts = {
     width: '100%',
     height: '100%',
@@ -401,27 +399,14 @@ export default function BroadcastViewer() {
       showinfo: 0,
       iv_load_policy: 3,
       playsinline: 1,
-      mute: 1,  // Start muted to bypass autoplay restrictions
+      mute: 0,  // Start unmuted
     },
-  };
-
-  // Handle unmute
-  const handleUnmute = () => {
-    setIsMuted(false);
-    try {
-      player1Ref.current?.unMute();
-      player2Ref.current?.unMute();
-      // Reapply volume after unmute
-      player1Ref.current?.setVolume(100 - crossfadeValue);
-      player2Ref.current?.setVolume(crossfadeValue);
-    } catch (e) {
-      console.log('Unmute error:', e);
-    }
   };
 
   const onPlayer1Ready = (event) => {
     console.log('Player 1 ready, djPlaying:', player1PlayingRef.current, 'crossfade:', crossfadeRef.current);
     player1Ref.current = event.target;
+    player1Ref.current.unMute();
     player1Ref.current.setVolume(100 - crossfadeRef.current);
 
     // Play only if DJ app's player 1 is playing
@@ -443,6 +428,7 @@ export default function BroadcastViewer() {
   const onPlayer2Ready = (event) => {
     console.log('Player 2 ready, djPlaying:', player2PlayingRef.current, 'crossfade:', crossfadeRef.current);
     player2Ref.current = event.target;
+    player2Ref.current.unMute();
     player2Ref.current.setVolume(crossfadeRef.current);
 
     // Play only if DJ app's player 2 is playing
@@ -487,19 +473,9 @@ export default function BroadcastViewer() {
     <div className="min-h-screen bg-black relative overflow-hidden">
       {/* Simple header */}
       <div className="absolute top-0 left-0 right-0 z-30 bg-gradient-to-b from-black/60 to-transparent p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-            <span className="text-white font-medium">{playlistName}</span>
-          </div>
-          {isMuted && (
-            <button
-              onClick={handleUnmute}
-              className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg animate-pulse"
-            >
-              🔇 Click to Unmute
-            </button>
-          )}
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+          <span className="text-white font-medium">{playlistName}</span>
         </div>
       </div>
 
