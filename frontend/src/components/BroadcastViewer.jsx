@@ -392,58 +392,60 @@ export default function BroadcastViewer() {
     height: '100%',
     host: 'https://www.youtube-nocookie.com',
     playerVars: {
-      autoplay: 0,  // Don't auto-start - we control playback based on server state
+      autoplay: 1,  // Auto-start (muted to bypass browser restrictions)
       controls: 0,
       modestbranding: 1,
       rel: 0,
       showinfo: 0,
       iv_load_policy: 3,
       playsinline: 1,
-      mute: 0,  // Start unmuted
+      mute: 1,  // Start muted to allow autoplay
     },
   };
 
   const onPlayer1Ready = (event) => {
     console.log('Player 1 ready, djPlaying:', player1PlayingRef.current, 'crossfade:', crossfadeRef.current);
     player1Ref.current = event.target;
-    player1Ref.current.unMute();
-    player1Ref.current.setVolume(100 - crossfadeRef.current);
 
-    // Play only if DJ app's player 1 is playing
-    if (player1PlayingRef.current) {
-      console.log('Player 1: calling playVideo() from onReady');
-      player1Ref.current.playVideo();
-      // Retry after a short delay in case first attempt is blocked
+    // Start playing muted, then unmute after short delay
+    player1Ref.current.playVideo();
+    setTimeout(() => {
+      if (player1Ref.current) {
+        player1Ref.current.unMute();
+        player1Ref.current.setVolume(100 - crossfadeRef.current);
+      }
+    }, 500);
+
+    // If DJ has this player paused, pause it after unmute
+    if (!player1PlayingRef.current) {
       setTimeout(() => {
-        if (player1PlayingRef.current && player1Ref.current) {
-          console.log('Player 1: retry playVideo()');
-          player1Ref.current.playVideo();
+        if (player1Ref.current && !player1PlayingRef.current) {
+          player1Ref.current.pauseVideo();
         }
-      }, 1000);
-    } else {
-      player1Ref.current.pauseVideo();
+      }, 600);
     }
   };
 
   const onPlayer2Ready = (event) => {
     console.log('Player 2 ready, djPlaying:', player2PlayingRef.current, 'crossfade:', crossfadeRef.current);
     player2Ref.current = event.target;
-    player2Ref.current.unMute();
-    player2Ref.current.setVolume(crossfadeRef.current);
 
-    // Play only if DJ app's player 2 is playing
-    if (player2PlayingRef.current) {
-      console.log('Player 2: calling playVideo() from onReady');
-      player2Ref.current.playVideo();
-      // Retry after a short delay in case first attempt is blocked
+    // Start playing muted, then unmute after short delay
+    player2Ref.current.playVideo();
+    setTimeout(() => {
+      if (player2Ref.current) {
+        player2Ref.current.unMute();
+        player2Ref.current.setVolume(crossfadeRef.current);
+      }
+    }, 500);
+
+    // If DJ has this player paused, pause it after unmute
+    if (!player2PlayingRef.current) {
       setTimeout(() => {
-        if (player2PlayingRef.current && player2Ref.current) {
-          console.log('Player 2: retry playVideo()');
-          player2Ref.current.playVideo();
+        if (player2Ref.current && !player2PlayingRef.current) {
+          player2Ref.current.pauseVideo();
         }
-      }, 1000);
-    } else {
-      player2Ref.current.pauseVideo();
+      }, 600);
     }
   };
 
