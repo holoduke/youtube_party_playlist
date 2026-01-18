@@ -550,8 +550,8 @@ export default function BroadcastViewer() {
       </div>
 
       {/* Debug panel */}
-      <div className="absolute bottom-0 left-0 right-0 z-50 bg-black/90 text-white text-xs font-mono p-3 max-h-[40vh] overflow-y-auto">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1 max-w-4xl">
+      <div className="absolute bottom-2 left-2 z-50 bg-black/80 text-white text-[10px] font-mono p-2 rounded-lg max-w-xs max-h-[50vh] overflow-y-auto">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
           {/* DJ App Status */}
           <div className="col-span-2 text-purple-400 font-bold border-b border-purple-400/30 mb-1">DJ APP STATUS</div>
           <div>DJ Player 1 Playing: <span className={debugInfo.djPlayer1Playing ? 'text-green-400 font-bold' : 'text-red-400'}>{String(debugInfo.djPlayer1Playing)}</span></div>
@@ -589,28 +589,28 @@ export default function BroadcastViewer() {
 
           <div className="col-span-2 text-white/50 mt-2">Last update: {debugInfo.lastUpdate}</div>
 
-          <div className="col-span-2 mt-2 flex gap-2">
+          <div className="col-span-2 mt-1 flex gap-1 flex-wrap">
             <button
               onClick={() => {
                 console.log('Force play clicked');
                 player1Ref.current?.playVideo();
                 player2Ref.current?.playVideo();
               }}
-              className="px-3 py-1 bg-green-600 hover:bg-green-500 rounded"
+              className="px-2 py-0.5 bg-green-600 hover:bg-green-500 rounded text-[9px]"
             >
-              Force Play Both
+              Play
             </button>
             <button
               onClick={() => {
                 const state1 = player1Ref.current?.getPlayerState();
                 const state2 = player2Ref.current?.getPlayerState();
-                const msg = `Player 1: ${state1}, Player 2: ${state2} (-1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued)`;
+                const msg = `P1: ${state1}, P2: ${state2}`;
                 console.log(msg);
                 alert(msg);
               }}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded"
+              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-[9px]"
             >
-              Check States
+              States
             </button>
             <button
               onClick={() => {
@@ -618,9 +618,9 @@ export default function BroadcastViewer() {
                 console.log('Player 1 ref:', player1Ref.current);
                 console.log('Player 2 ref:', player2Ref.current);
               }}
-              className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded"
+              className="px-2 py-0.5 bg-gray-600 hover:bg-gray-500 rounded text-[9px]"
             >
-              Log to Console
+              Log
             </button>
           </div>
         </div>
