@@ -15,6 +15,7 @@ export default function BroadcastViewer() {
   const [isEnded, setIsEnded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [debugInfo, setDebugInfo] = useState({});
+  const [needsInteraction, setNeedsInteraction] = useState(true);
   const [startedAt, setStartedAt] = useState(null);
   const [fadeTrigger, setFadeTrigger] = useState(null);
 
@@ -485,6 +486,18 @@ export default function BroadcastViewer() {
     }
   };
 
+  // Handle user click to start playback (required by browser autoplay policy)
+  const handleStartClick = () => {
+    setNeedsInteraction(false);
+    // Try to play both players
+    safePlayerCall(player1Ref, 'unMute');
+    safePlayerCall(player1Ref, 'setVolume', 100 - crossfadeRef.current);
+    safePlayerCall(player1Ref, 'playVideo');
+    safePlayerCall(player2Ref, 'unMute');
+    safePlayerCall(player2Ref, 'setVolume', crossfadeRef.current);
+    safePlayerCall(player2Ref, 'playVideo');
+  };
+
   if (loading && !isEnded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
@@ -520,6 +533,23 @@ export default function BroadcastViewer() {
           <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
         </div>
       </div>
+
+      {/* Click to start overlay (required by browser autoplay policy) */}
+      {needsInteraction && (
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 cursor-pointer"
+          onClick={handleStartClick}
+        >
+          <div className="text-center">
+            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
+              <svg className="w-12 h-12 text-white ml-2" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </div>
+            <p className="text-white/60 text-sm">Tap to start</p>
+          </div>
+        </div>
+      )}
 
       {/* Dual video players - fullscreen overlapping */}
       <div className="absolute inset-0">
