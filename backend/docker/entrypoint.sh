@@ -1,12 +1,6 @@
 #!/bin/sh
 set -e
 
-# Create .env file from example if it doesn't exist
-if [ ! -f /var/www/.env ]; then
-    echo "Creating .env file from .env.example..."
-    cp /var/www/.env.example /var/www/.env
-fi
-
 # Create database directory and file if they don't exist
 mkdir -p /var/www/database
 if [ ! -f /var/www/database/database.sqlite ]; then
@@ -18,18 +12,18 @@ fi
 chown -R www-data:www-data /var/www/database /var/www/storage /var/www/bootstrap/cache
 chmod -R 755 /var/www/storage /var/www/bootstrap/cache
 
-# Generate app key if not set
+# Check APP_KEY is set (should be provided via Coolify env vars)
 if [ -z "$APP_KEY" ]; then
-    echo "Generating application key..."
-    php artisan key:generate --force
+    echo "WARNING: APP_KEY not set. Generate one with: php artisan key:generate --show"
+    echo "Then add it to Coolify environment variables."
 fi
 
 # Run migrations
 echo "Running database migrations..."
 php artisan migrate --force
 
-# Cache configuration for production
-if [ "$APP_ENV" = "production" ]; then
+# Cache configuration for production (skip if APP_KEY not set)
+if [ "$APP_ENV" = "production" ] && [ -n "$APP_KEY" ]; then
     echo "Caching configuration..."
     php artisan config:cache
     php artisan route:cache
