@@ -373,20 +373,28 @@ class PlaylistController extends Controller
         }
 
         $validated = $request->validate([
-            'current_video' => 'nullable|array',
-            'next_video' => 'nullable|array',
+            'player1_video' => 'nullable|array',
+            'player2_video' => 'nullable|array',
+            'player1_playing' => 'nullable|boolean',
+            'player2_playing' => 'nullable|boolean',
+            'player1_time' => 'nullable|numeric',
+            'player2_time' => 'nullable|numeric',
             'crossfade_value' => 'required|numeric|min:0|max:100',
-            'is_playing' => 'nullable|boolean',
             'started_at' => 'nullable|numeric',
+            'fade_trigger' => 'nullable|array',
         ]);
 
         $playlist->update([
             'state' => [
-                'current_video' => $validated['current_video'],
-                'next_video' => $validated['next_video'],
+                'player1_video' => $validated['player1_video'],
+                'player2_video' => $validated['player2_video'],
+                'player1_playing' => $validated['player1_playing'] ?? false,
+                'player2_playing' => $validated['player2_playing'] ?? false,
+                'player1_time' => $validated['player1_time'] ?? 0,
+                'player2_time' => $validated['player2_time'] ?? 0,
                 'crossfade_value' => $validated['crossfade_value'],
-                'is_playing' => $validated['is_playing'] ?? false,
                 'started_at' => $validated['started_at'] ?? null,
+                'fade_trigger' => $validated['fade_trigger'] ?? null,
                 'updated_at' => now()->toISOString(),
             ],
         ]);

@@ -328,15 +328,19 @@ function App() {
 
     // Debounce sync
     broadcastSyncTimeoutRef.current = setTimeout(async () => {
-      const isPlayer1Active = crossfadeValue < 50;
-      const isPlaying = isPlayer1Active ? player1State.playing : player2State.playing;
+      // Send position-based video assignments and individual player states
       try {
         await syncBroadcastState(selectedPlaylist.id, {
-          current_video: isPlayer1Active ? player1Video : player2Video,
-          next_video: isPlayer1Active ? player2Video : player1Video,
+          player1_video: player1Video,
+          player2_video: player2Video,
+          player1_playing: player1State.playing,
+          player2_playing: player2State.playing,
+          player1_time: player1State.currentTime,
+          player2_time: player2State.currentTime,
           crossfade_value: crossfadeValue,
-          is_playing: isPlaying,
           started_at: videoStartedAtRef.current,
+          // Fade trigger data - viewer will animate locally based on this
+          fade_trigger: fadeTriggeredRef.current,
         });
       } catch (error) {
         console.error('Failed to sync broadcast state:', error);
@@ -348,7 +352,7 @@ function App() {
         clearTimeout(broadcastSyncTimeoutRef.current);
       }
     };
-  }, [isBroadcasting, selectedPlaylist, player1Video, player2Video, crossfadeValue, player1State.playing, player2State.playing]);
+  }, [isBroadcasting, selectedPlaylist, player1Video, player2Video, crossfadeValue, player1State.playing, player2State.playing, player1State.currentTime, player2State.currentTime]);
 
   useEffect(() => {
     if (viewMode === 'categories') {
@@ -899,6 +903,8 @@ function App() {
   const [isAutoFading, setIsAutoFading] = useState(false);
   const autoFadeIntervalRef = useRef(null);
   const loadNextVideoTimeoutRef = useRef(null);
+  // Fade trigger data for broadcast viewers - they animate locally based on this
+  const fadeTriggeredRef = useRef(null);
 
   // Get the auto-play video list (from selected playlist or viewing playlist)
   const autoPlayVideos = selectedPlaylist?.videos || viewingPlaylist?.videos || [];
@@ -931,9 +937,33 @@ function App() {
     // Fade settings: 8 seconds total, update every 200ms = 40 steps
     const startValue = fadingToPlayer2 ? 0 : 100;
     const endValue = fadingToPlayer2 ? 100 : 0;
+    const fadeDuration = 8000; // 8 seconds
     const totalSteps = 40;
     const stepSize = (endValue - startValue) / totalSteps;
     let step = 0;
+
+    // Set fade trigger for broadcast viewers - they will animate locally
+    fadeTriggeredRef.current = {
+      started_at: Date.now(),
+      start_value: startValue,
+      end_value: endValue,
+      duration: fadeDuration,
+    };
+
+    // Immediately sync fade trigger to server so viewers can start animating right away
+    if (isBroadcasting && selectedPlaylist) {
+      syncBroadcastState(selectedPlaylist.id, {
+        player1_video: player1Video,
+        player2_video: player2Video,
+        player1_playing: player1State.playing,
+        player2_playing: player2State.playing,
+        player1_time: player1State.currentTime,
+        player2_time: player2State.currentTime,
+        crossfade_value: startValue,
+        started_at: videoStartedAtRef.current,
+        fade_trigger: fadeTriggeredRef.current,
+      }).catch(err => console.error('Failed to sync fade trigger:', err));
+    }
 
     // Set initial position
     setCrossfadeValue(startValue);
@@ -948,6 +978,7 @@ function App() {
         clearInterval(autoFadeIntervalRef.current);
         autoFadeIntervalRef.current = null;
         setIsAutoFading(false);
+        fadeTriggeredRef.current = null; // Clear fade trigger
 
         // Pause the player that was faded out
         const finishedPlayerRef = fadingToPlayer2 ? player1Ref : player2Ref;
@@ -1057,6 +1088,30 @@ function App() {
       const startValue = fadingToPlayer2 ? 0 : 100;
       const endValue = fadingToPlayer2 ? 100 : 0;
       const fadeStep = fadingToPlayer2 ? 6.25 : -6.25; // 100/16 steps over ~8 seconds
+      const fadeDuration = 8000; // 8 seconds
+
+      // Set fade trigger for broadcast viewers - they will animate locally
+      fadeTriggeredRef.current = {
+        started_at: Date.now(),
+        start_value: startValue,
+        end_value: endValue,
+        duration: fadeDuration,
+      };
+
+      // Immediately sync fade trigger to server so viewers can start animating right away
+      if (isBroadcasting && selectedPlaylist) {
+        syncBroadcastState(selectedPlaylist.id, {
+          player1_video: player1Video,
+          player2_video: player2Video,
+          player1_playing: player1State.playing,
+          player2_playing: player2State.playing,
+          player1_time: player1State.currentTime,
+          player2_time: player2State.currentTime,
+          crossfade_value: startValue,
+          started_at: videoStartedAtRef.current,
+          fade_trigger: fadeTriggeredRef.current,
+        }).catch(err => console.error('Failed to sync auto-fade trigger:', err));
+      }
 
       // Start from clean extreme
       let currentFade = startValue;
@@ -1071,6 +1126,7 @@ function App() {
           clearInterval(autoFadeIntervalRef.current);
           autoFadeIntervalRef.current = null;
           setIsAutoFading(false);
+          fadeTriggeredRef.current = null; // Clear fade trigger
 
           // Stop the player that just finished (faded out)
           const finishedPlayerRef = fadingToPlayer2 ? player1Ref : player2Ref;
