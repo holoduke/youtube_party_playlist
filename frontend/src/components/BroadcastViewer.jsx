@@ -517,14 +517,14 @@ export default function BroadcastViewer() {
             <div className="text-[10px] text-yellow-300/60">{player1Video?.youtube_id || '-'}</div>
           </div>
           {player1Video && (
-            <div className="absolute inset-0">
+            <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
               <YouTube
                 key={`p1-${player1Video.youtube_id}`}
                 videoId={player1Video.youtube_id}
                 opts={opts}
                 onReady={onPlayer1Ready}
-                className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full"
-                iframeClassName="w-full h-full"
+                className="!w-full !h-full"
+                iframeClassName="!w-full !h-full !absolute !inset-0"
               />
             </div>
           )}
@@ -547,14 +547,14 @@ export default function BroadcastViewer() {
             <div className="text-[10px] text-cyan-300/60">{player2Video?.youtube_id || '-'}</div>
           </div>
           {player2Video && (
-            <div className="absolute inset-0">
+            <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
               <YouTube
                 key={`p2-${player2Video.youtube_id}`}
                 videoId={player2Video.youtube_id}
                 opts={opts}
                 onReady={onPlayer2Ready}
-                className="w-full h-full [&>iframe]:w-full [&>iframe]:h-full"
-                iframeClassName="w-full h-full"
+                className="!w-full !h-full"
+                iframeClassName="!w-full !h-full !absolute !inset-0"
               />
             </div>
           )}

@@ -1,0 +1,42 @@
+# Docker Compose for local development/testing
+# For Coolify: Deploy frontend and backend as separate services
+
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=Barmania
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - APP_URL=${BACKEND_URL:-http://localhost:8000}
+      - DB_CONNECTION=sqlite
+      - SESSION_DRIVER=database
+      - CACHE_STORE=database
+      - QUEUE_CONNECTION=sync
+    volumes:
+      - backend_data:/var/www/database
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/categories"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${BACKEND_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  backend_data:

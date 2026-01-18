@@ -1,0 +1,33 @@
+# Dependencies
+/vendor
+
+# Environment
+.env
+.env.backup
+.env.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Cache and logs
+/storage/logs/*
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+
+# Testing
+/tests
+phpunit.xml
+.phpunit.result.cache
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CHANGELOG.md
