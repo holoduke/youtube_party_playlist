@@ -40,12 +40,13 @@ function App() {
     setSearchParams(() => {
       const newParams = new URLSearchParams();
       if (mode === 'playlist') {
-        newParams.set('view', 'playlist');
         if (playlistHash) {
           newParams.set('pl', playlistHash);
         }
+        // Clean URL for playlist (default view)
+      } else if (mode === 'categories') {
+        newParams.set('view', 'categories');
       }
-      // Don't set any params for library/categories view (clean URL)
       return newParams;
     }, { replace: true });
   };
