@@ -2430,9 +2430,10 @@ function App() {
                     setPlaylistMode(true);
                     setAutoPlayEnabled(true);
                   }}
-                  onPlay={(video) => {
+                  onPlay={(video, index) => {
                     // Check if nothing is currently playing (no need to fade)
                     const isAnythingPlaying = player1State.playing || player2State.playing;
+                    const playlistVideos = viewingPlaylist?.videos || [];
 
                     if (!isAnythingPlaying) {
                       // Nothing playing: load into player 1 and play directly (no fade needed)
@@ -2440,6 +2441,15 @@ function App() {
                       setPlayer1Video(video);
                       setRestoredVideoIds(prev => ({ ...prev, player1: null })); // null = autoplay
                       setCrossfadeValue(0); // Player 1 is now active
+
+                      // Load next song into player 2 (if available)
+                      const nextIndex = (index + 1) % playlistVideos.length;
+                      if (playlistVideos.length > 1 && nextIndex !== index) {
+                        const nextVideo = playlistVideos[nextIndex];
+                        console.log(`[Play] Pre-loading next song "${nextVideo.title}" in Player 2`);
+                        setPlayer2Video(nextVideo);
+                        setRestoredVideoIds(prev => ({ ...prev, player2: nextVideo.youtube_id })); // Don't autoplay
+                      }
                     } else {
                       // Something is playing: queue in inactive player and fade to it
                       const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
