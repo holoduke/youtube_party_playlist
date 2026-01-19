@@ -2150,9 +2150,13 @@ function App() {
                 </div>
               </div>
 
-              {/* Player 1 with volume indicator */}
-              <div className="flex gap-2">
-                <div className="flex-1 min-w-0 overflow-hidden">
+              {/* Stacked Video Players - opacity controlled by crossfade */}
+              <div className="relative aspect-video rounded-xl overflow-hidden border-2 border-purple-500/50 shadow-lg shadow-purple-500/20">
+                {/* Player 1 - bottom layer */}
+                <div
+                  className="absolute inset-0 transition-opacity duration-300"
+                  style={{ opacity: (100 - crossfadeValue) / 100 }}
+                >
                   <VideoPlayer
                     ref={player1Ref}
                     video={player1Video}
@@ -2169,18 +2173,12 @@ function App() {
                     showDropOverlay={isGlobalDragging}
                   />
                 </div>
-                {/* Volume indicator */}
-                <div className="w-3 bg-white/10 rounded-full overflow-hidden flex flex-col-reverse">
-                  <div
-                    className="w-full bg-gradient-to-t from-purple-500 to-purple-400 transition-all duration-300"
-                    style={{ height: `${100 - crossfadeValue}%` }}
-                  />
-                </div>
-              </div>
 
-              {/* Player 2 with volume indicator */}
-              <div className="flex gap-2">
-                <div className="flex-1 min-w-0 overflow-hidden">
+                {/* Player 2 - top layer */}
+                <div
+                  className="absolute inset-0 transition-opacity duration-300"
+                  style={{ opacity: crossfadeValue / 100 }}
+                >
                   <VideoPlayer
                     ref={player2Ref}
                     video={player2Video}
@@ -2197,13 +2195,16 @@ function App() {
                     showDropOverlay={isGlobalDragging}
                   />
                 </div>
-                {/* Volume indicator */}
-                <div className="w-3 bg-white/10 rounded-full overflow-hidden flex flex-col-reverse">
-                  <div
-                    className="w-full bg-gradient-to-t from-pink-500 to-pink-400 transition-all duration-300"
-                    style={{ height: `${crossfadeValue}%` }}
-                  />
-                </div>
+
+                {/* Next up indicator */}
+                {(player1Video || player2Video) && (
+                  <div className="absolute bottom-2 right-2 z-20 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-white/80 flex items-center gap-2">
+                    <span className="text-white/50">Next:</span>
+                    <span className="font-medium truncate max-w-32">
+                      {crossfadeValue < 50 ? (player2Video?.title || 'None') : (player1Video?.title || 'None')}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
