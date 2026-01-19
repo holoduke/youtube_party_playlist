@@ -76,6 +76,9 @@ function App() {
   const broadcastSyncTimeoutRef = useRef(null);
   const videoStartedAtRef = useRef(null); // Timestamp when current video started playing
 
+  // DJ mute state (local only, doesn't affect viewers)
+  const [djMuted, setDjMuted] = useState(false);
+
   // Account settings modal state
   const [showAccountSettings, setShowAccountSettings] = useState(false);
 
@@ -2156,7 +2159,7 @@ function App() {
                   <VideoPlayer
                     ref={player1Ref}
                     video={player1Video}
-                    volume={100 - crossfadeValue}
+                    volume={djMuted ? 0 : 100 - crossfadeValue}
                     playerNumber={1}
                     isActive={crossfadeValue < 50}
                     onTimeUpdate={handleTimeUpdate}
@@ -2178,7 +2181,7 @@ function App() {
                   <VideoPlayer
                     ref={player2Ref}
                     video={player2Video}
-                    volume={crossfadeValue}
+                    volume={djMuted ? 0 : crossfadeValue}
                     playerNumber={2}
                     isActive={crossfadeValue >= 50}
                     onTimeUpdate={handleTimeUpdate}
@@ -2191,6 +2194,28 @@ function App() {
                     showDropOverlay={isGlobalDragging}
                   />
                 </div>
+
+                {/* DJ Mute button */}
+                <button
+                  onClick={() => setDjMuted(!djMuted)}
+                  className={`absolute top-2 right-2 z-20 p-2 rounded-lg backdrop-blur-sm transition-all ${
+                    djMuted
+                      ? 'bg-red-500/80 text-white'
+                      : 'bg-black/50 text-white/70 hover:bg-black/70 hover:text-white'
+                  }`}
+                  title={djMuted ? 'Unmute (DJ only)' : 'Mute (DJ only)'}
+                >
+                  {djMuted ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                  )}
+                </button>
 
                 {/* Next up indicator */}
                 {(player1Video || player2Video) && (
