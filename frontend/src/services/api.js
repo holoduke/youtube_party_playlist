@@ -242,4 +242,45 @@ export const extractYouTubeVideoId = (input) => {
   return null;
 };
 
+// ==================== YouTube Playlist Import API (OAuth) ====================
+
+// Get user's YouTube playlists
+export const getMyYouTubePlaylists = async (userId) => {
+  const response = await api.get('/youtube/my-playlists', {
+    params: { user_id: userId }
+  });
+  return response.data;
+};
+
+// Get items from a specific YouTube playlist
+export const getYouTubePlaylistItems = async (userId, playlistId) => {
+  const response = await api.get('/youtube/playlist-items', {
+    params: { user_id: userId, playlist_id: playlistId }
+  });
+  return response.data;
+};
+
+// Import a YouTube playlist into the app
+export const importYouTubePlaylist = async (userId, youtubePlaylistId, playlistName, isPublic = false) => {
+  const response = await api.post('/youtube/import-playlist', {
+    user_id: userId,
+    youtube_playlist_id: youtubePlaylistId,
+    playlist_name: playlistName,
+    is_public: isPublic,
+  });
+  return response.data;
+};
+
+// Disconnect Google account
+export const disconnectGoogle = async (userId) => {
+  const response = await api.post('/auth/google/disconnect', { user_id: userId });
+  return response.data;
+};
+
+// Check Google/YouTube auth status
+export const getGoogleAuthStatus = async (userId) => {
+  const response = await api.get('/auth/google/status', { params: { user_id: userId } });
+  return response.data;
+};
+
 export default api;

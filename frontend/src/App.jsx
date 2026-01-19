@@ -11,6 +11,7 @@ import VideoPlayer from './components/VideoPlayer';
 import Crossfader from './components/Crossfader';
 import UserSelector from './components/UserSelector';
 import BroadcastModal from './components/BroadcastModal';
+import YouTubePlaylistImport from './components/YouTubePlaylistImport';
 
 function App() {
   const navigate = useNavigate();
@@ -76,7 +77,7 @@ function App() {
 
   // Playlist modal state
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  const [playlistModalTab, setPlaylistModalTab] = useState('my'); // 'my' | 'public' | 'create'
+  const [playlistModalTab, setPlaylistModalTab] = useState('my'); // 'my' | 'public' | 'create' | 'import'
   const [publicPlaylistSearch, setPublicPlaylistSearch] = useState('');
   const [publicPlaylists, setPublicPlaylists] = useState([]);
   const [publicPlaylistsLoading, setPublicPlaylistsLoading] = useState(false);
@@ -1622,6 +1623,16 @@ function App() {
               >
                 Create
               </button>
+              <button
+                onClick={() => handlePlaylistModalTabChange('import')}
+                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                  playlistModalTab === 'import'
+                    ? 'bg-purple-500 text-white'
+                    : 'text-purple-300 hover:text-white'
+                }`}
+              >
+                Import
+              </button>
             </div>
 
             {/* Tab Content */}
@@ -1786,6 +1797,20 @@ function App() {
                     )}
                   </button>
                 </div>
+              )}
+
+              {/* Import from YouTube Tab */}
+              {playlistModalTab === 'import' && (
+                <YouTubePlaylistImport
+                  onImportComplete={(playlist) => {
+                    // Refresh playlists and select the imported one
+                    loadPlaylists();
+                    setSelectedPlaylist(playlist);
+                    setShowPlaylistModal(false);
+                    showNotification(`Imported "${playlist.name}" with ${playlist.videos?.length || 0} videos`);
+                  }}
+                  onClose={() => setShowPlaylistModal(false)}
+                />
               )}
             </div>
           </div>

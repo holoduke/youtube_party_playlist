@@ -21,6 +21,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'google_id',
+        'avatar',
     ];
 
     /**
@@ -52,5 +54,29 @@ class User extends Authenticatable
     public function playlists()
     {
         return $this->hasMany(Playlist::class);
+    }
+
+    /**
+     * Get the OAuth tokens for this user.
+     */
+    public function oauthTokens()
+    {
+        return $this->hasMany(OAuthToken::class);
+    }
+
+    /**
+     * Get the Google OAuth token for this user.
+     */
+    public function googleToken()
+    {
+        return $this->oauthTokens()->where('provider', 'google')->first();
+    }
+
+    /**
+     * Check if user has connected their Google account.
+     */
+    public function hasGoogleConnected(): bool
+    {
+        return !is_null($this->google_id);
     }
 }

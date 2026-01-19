@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\PlaylistController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VideoController;
 use App\Http\Controllers\Api\YouTubeController;
+use App\Http\Controllers\Api\GoogleAuthController;
+use App\Http\Controllers\Api\YouTubePlaylistController;
 use Illuminate\Support\Facades\Route;
 
 // Authentication
@@ -57,3 +59,12 @@ Route::post('/youtube/import', [YouTubeController::class, 'import']);
 // Player sync routes (for remote display)
 Route::post('/player/sync', [PlayerController::class, 'sync']);
 Route::get('/player/state', [PlayerController::class, 'state']);
+
+// Google OAuth routes (redirect/callback are in web.php for session support)
+Route::post('/auth/google/disconnect', [GoogleAuthController::class, 'disconnect']);
+Route::get('/auth/google/status', [GoogleAuthController::class, 'status']);
+
+// YouTube playlist import (requires Google OAuth)
+Route::get('/youtube/my-playlists', [YouTubePlaylistController::class, 'myPlaylists']);
+Route::get('/youtube/playlist-items', [YouTubePlaylistController::class, 'playlistItems']);
+Route::post('/youtube/import-playlist', [YouTubePlaylistController::class, 'importPlaylist']);
