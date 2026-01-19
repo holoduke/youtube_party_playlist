@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, createPlaylist, updatePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, startBroadcast, stopBroadcast, syncBroadcastState } from './services/api';
+import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, createPlaylist, updatePlaylist, deletePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, startBroadcast, stopBroadcast, syncBroadcastState } from './services/api';
 import { initEcho, broadcastState } from './services/playerSync';
 import { useUser } from './contexts/UserContext';
 import CategoryFilter from './components/CategoryFilter';
@@ -1651,14 +1651,14 @@ function App() {
                 <div className="space-y-2">
                   {playlists.length > 0 ? (
                     playlists.map((playlist) => (
-                      <button
+                      <div
                         key={playlist.id}
-                        onClick={() => handleSelectPlaylistFromModal(playlist.id)}
-                        className={`w-full p-3 rounded-xl transition-colors flex items-center gap-3 ${
+                        className={`group w-full p-3 rounded-xl transition-colors flex items-center gap-3 cursor-pointer ${
                           selectedPlaylist?.id === playlist.id
                             ? 'bg-purple-500/30 border border-purple-500'
                             : 'bg-white/5 hover:bg-white/10 border border-transparent'
                         }`}
+                        onClick={() => handleSelectPlaylistFromModal(playlist.id)}
                       >
                         <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
                           <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1674,12 +1674,38 @@ function App() {
                             )}
                           </div>
                         </div>
-                        {selectedPlaylist?.id === playlist.id && (
+                        {selectedPlaylist?.id === playlist.id ? (
                           <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Delete "${playlist.name}"? This cannot be undone.`)) {
+                                deletePlaylist(playlist.id).then(() => {
+                                  loadPlaylists();
+                                  if (selectedPlaylist?.id === playlist.id) {
+                                    setSelectedPlaylist(null);
+                                  }
+                                  if (viewingPlaylist?.id === playlist.id) {
+                                    setViewingPlaylist(null);
+                                  }
+                                  showNotification(`Deleted "${playlist.name}"`);
+                                }).catch(() => {
+                                  showNotification('Failed to delete playlist', 'error');
+                                });
+                              }
+                            }}
+                            className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-all"
+                            title="Delete playlist"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
                         )}
-                      </button>
+                      </div>
                     ))
                   ) : (
                     <div className="text-center py-8 text-purple-300/60">
