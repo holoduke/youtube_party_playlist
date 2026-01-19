@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import YouTube from 'react-youtube';
 import { getBroadcastState } from '../services/api';
 
 export default function BroadcastViewer() {
   const { hash } = useParams();
+  const [searchParams] = useSearchParams();
+  const showDebug = searchParams.get('debug') === '1';
   const [playlistName, setPlaylistName] = useState('');
   const [player1Video, setPlayer1Video] = useState(null);
   const [player2Video, setPlayer2Video] = useState(null);
@@ -16,6 +18,7 @@ export default function BroadcastViewer() {
   const [loading, setLoading] = useState(true);
   const [debugInfo, setDebugInfo] = useState({});
   const [isMuted, setIsMuted] = useState(true); // Start muted for autoplay
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasReceivedState, setHasReceivedState] = useState(false);
   const [startedAt, setStartedAt] = useState(null);
   const [fadeTrigger, setFadeTrigger] = useState(null);
@@ -261,9 +264,9 @@ export default function BroadcastViewer() {
     };
   }, [hash]);
 
-  // Unified crossfade animation - drives both opacity and volume from same value
+  // Sync crossfade when no fade animation is active
   useEffect(() => {
-    // If no fade trigger, just sync to server value
+    // Only sync directly when there's no active fade animation
     if (!fadeTrigger) {
       setAnimatedCrossfade(crossfadeValue);
       // Set volumes directly
@@ -275,6 +278,12 @@ export default function BroadcastViewer() {
           player2Ref.current.setVolume(crossfadeValue);
         }
       } catch (e) {}
+    }
+  }, [crossfadeValue, fadeTrigger]);
+
+  // Fade animation effect - only triggers on fadeTrigger changes
+  useEffect(() => {
+    if (!fadeTrigger) {
       return;
     }
 
@@ -329,7 +338,7 @@ export default function BroadcastViewer() {
         cancelAnimationFrame(fadeAnimationRef.current);
       }
     };
-  }, [fadeTrigger, crossfadeValue]);
+  }, [fadeTrigger]);
 
   // Load video via API when video changes (no re-render needed)
   useEffect(() => {
@@ -375,80 +384,61 @@ export default function BroadcastViewer() {
     // Don't control playback until we've received state from server
     if (!hasReceivedState) return;
 
-    console.log('Player 1 playback effect, playing:', player1Playing);
-
     const controlPlayer = () => {
-      // Check if ref exists and has required methods (not destroyed)
       if (!player1Ref.current || typeof player1Ref.current.getPlayerState !== 'function') {
         return;
       }
 
       try {
+        const state = player1Ref.current.getPlayerState();
         if (player1Playing) {
-          const state = player1Ref.current.getPlayerState();
           // Only call playVideo if not already playing (state 1) or buffering (state 3)
           if (state !== 1 && state !== 3) {
-            console.log('Player 1: playVideo() - current state:', state);
             player1Ref.current.playVideo();
           }
         } else {
-          const state = player1Ref.current.getPlayerState();
           // Only pause if actually playing
           if (state === 1 || state === 3) {
-            console.log('Player 1: pauseVideo()');
             player1Ref.current.pauseVideo();
           }
         }
       } catch (e) {
-        // Player was likely destroyed, clear ref
-        console.log('Player 1 control error, clearing ref');
         player1Ref.current = null;
       }
     };
 
     controlPlayer();
-    // Keep checking and retrying
     const interval = setInterval(controlPlayer, 1000);
     return () => clearInterval(interval);
   }, [player1Playing, player1Video, hasReceivedState]);
 
   useEffect(() => {
-    // Don't control playback until we've received state from server
     if (!hasReceivedState) return;
 
-    console.log('Player 2 playback effect, playing:', player2Playing);
-
     const controlPlayer = () => {
-      // Check if ref exists and has required methods (not destroyed)
       if (!player2Ref.current || typeof player2Ref.current.getPlayerState !== 'function') {
         return;
       }
 
       try {
+        const state = player2Ref.current.getPlayerState();
         if (player2Playing) {
-          const state = player2Ref.current.getPlayerState();
           // Only call playVideo if not already playing (state 1) or buffering (state 3)
           if (state !== 1 && state !== 3) {
-            console.log('Player 2: playVideo() - current state:', state);
             player2Ref.current.playVideo();
           }
         } else {
-          const state = player2Ref.current.getPlayerState();
           // Only pause if actually playing
           if (state === 1 || state === 3) {
-            console.log('Player 2: pauseVideo()');
             player2Ref.current.pauseVideo();
           }
         }
       } catch (e) {
-        // Player was likely destroyed, clear ref
-        console.log('Player 2 control error, clearing ref');
         player2Ref.current = null;
       }
     };
 
     controlPlayer();
-    // Keep checking and retrying
     const interval = setInterval(controlPlayer, 1000);
     return () => clearInterval(interval);
   }, [player2Playing, player2Video, hasReceivedState]);
@@ -525,6 +515,26 @@ export default function BroadcastViewer() {
     safePlayerCall(player2Ref, 'setVolume', crossfadeRef.current);
   };
 
+  // Handle fullscreen toggle
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.log('Fullscreen error:', err);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
   if (loading && !isEnded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
@@ -551,30 +561,47 @@ export default function BroadcastViewer() {
     <div className="min-h-screen bg-black relative overflow-hidden">
       {/* Broadcast icon */}
       <div className="absolute top-4 left-4 z-30">
-        <div className="flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-2">
-          <svg className="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="7" width="20" height="14" rx="2" />
-            <polyline points="17,2 12,7 7,2" />
-            <circle cx="12" cy="14" r="2" fill="currentColor" />
-          </svg>
-          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+            <span className="text-white font-bold text-lg">B</span>
+          </div>
+          <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
         </div>
       </div>
 
-      {/* Unmute button - shows when muted */}
-      {isMuted && (
+      {/* Control buttons - top right */}
+      <div className="absolute top-4 right-4 z-40 flex items-center gap-2">
+        {/* Unmute button - shows when muted */}
+        {isMuted && (
+          <button
+            onClick={handleUnmute}
+            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full px-4 py-2 transition-colors cursor-pointer"
+          >
+            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <line x1="23" y1="9" x2="17" y2="15" />
+              <line x1="17" y1="9" x2="23" y2="15" />
+            </svg>
+            <span className="text-white text-sm font-medium">Tap to unmute</span>
+          </button>
+        )}
+
+        {/* Fullscreen button */}
         <button
-          onClick={handleUnmute}
-          className="absolute top-4 right-4 z-40 flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full px-4 py-2 transition-colors cursor-pointer"
+          onClick={toggleFullscreen}
+          className="flex items-center justify-center w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full transition-colors cursor-pointer"
         >
-          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-            <line x1="23" y1="9" x2="17" y2="15" />
-            <line x1="17" y1="9" x2="23" y2="15" />
-          </svg>
-          <span className="text-white text-sm font-medium">Tap to unmute</span>
+          {isFullscreen ? (
+            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+            </svg>
+          )}
         </button>
-      )}
+      </div>
 
       {/* Dual video players - fullscreen overlapping, pointer-events disabled to prevent pause on click */}
       <div className="absolute inset-0 pointer-events-none">
@@ -613,7 +640,8 @@ export default function BroadcastViewer() {
         </div>
       </div>
 
-      {/* Debug panel */}
+      {/* Debug panel - only shown with ?debug=1 */}
+      {showDebug && (
       <div className="absolute bottom-2 left-2 z-50 bg-black/80 text-white text-[10px] font-mono p-2 rounded-lg max-w-xs max-h-[50vh] overflow-y-auto">
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
           {/* DJ App Status */}
@@ -689,6 +717,7 @@ export default function BroadcastViewer() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
