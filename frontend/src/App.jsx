@@ -12,6 +12,7 @@ import Crossfader from './components/Crossfader';
 import UserSelector from './components/UserSelector';
 import BroadcastModal from './components/BroadcastModal';
 import YouTubePlaylistImport from './components/YouTubePlaylistImport';
+import AccountSettings from './components/AccountSettings';
 
 function App() {
   const navigate = useNavigate();
@@ -74,6 +75,9 @@ function App() {
   const [broadcastCode, setBroadcastCode] = useState(null);
   const broadcastSyncTimeoutRef = useRef(null);
   const videoStartedAtRef = useRef(null); // Timestamp when current video started playing
+
+  // Account settings modal state
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
 
   // Playlist modal state
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -1227,6 +1231,11 @@ function App() {
       {/* User Selection Modal */}
       <UserSelector />
 
+      {/* Account Settings Modal */}
+      {showAccountSettings && (
+        <AccountSettings onClose={() => setShowAccountSettings(false)} />
+      )}
+
       {/* Notification Toast */}
       {notification && (
         <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-lg shadow-lg transition-all ${
@@ -1829,21 +1838,24 @@ function App() {
             <div className="flex items-center gap-3">
               {/* Current User Display */}
               {currentUser && (
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                    {currentUser.name.charAt(0)}
-                  </div>
+                <button
+                  onClick={() => setShowAccountSettings(true)}
+                  className="flex items-center gap-2 flex-shrink-0 p-1.5 -m-1.5 rounded-xl hover:bg-white/10 transition-colors"
+                  title="Account Settings"
+                >
+                  {currentUser.avatar ? (
+                    <img src={currentUser.avatar} alt={currentUser.name} className="w-8 h-8 rounded-full" />
+                  ) : (
+                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                      {currentUser.name.charAt(0)}
+                    </div>
+                  )}
                   <span className="text-white text-sm hidden md:inline">{currentUser.name}</span>
-                  <button
-                    onClick={handleLogout}
-                    className="p-1.5 text-purple-300/60 hover:text-white hover:bg-white/10 rounded transition-colors"
-                    title="Logout"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                  </button>
-                </div>
+                  <svg className="w-4 h-4 text-purple-300/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
               )}
             </div>
           </div>
