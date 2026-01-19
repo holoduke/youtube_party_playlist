@@ -2401,7 +2401,7 @@ function App() {
                   videos={displayVideos}
                   onReorder={handleReorderPlaylist}
                   onRemove={(videoId) => handleRemoveFromPlaylist(videoId, viewingPlaylist.id)}
-                  activeVideoId={activeVideo?.id}
+                  activeVideoId={(player1State.playing || player2State.playing) ? activeVideo?.id : null}
                   onQueue={(video) => {
                     // Check if nothing is currently playing
                     const isAnythingPlaying = player1State.playing || player2State.playing;
