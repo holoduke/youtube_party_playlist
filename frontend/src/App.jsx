@@ -112,6 +112,9 @@ function App() {
   const [addVideoModal, setAddVideoModal] = useState(null); // null or video object
   const [showPlaylistSubmenu, setShowPlaylistSubmenu] = useState(false);
 
+  // Playlist item menu state
+  const [playlistMenuOpen, setPlaylistMenuOpen] = useState(null); // playlist id or null
+
   // Inline playlist name editing
   const [editingPlaylistName, setEditingPlaylistName] = useState(false);
   const [editedPlaylistName, setEditedPlaylistName] = useState('');
@@ -1720,37 +1723,66 @@ function App() {
                             )}
                           </div>
                         </div>
-                        {selectedPlaylist?.id === playlist.id ? (
-                          <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {selectedPlaylist?.id === playlist.id && (
+                          <svg className="w-5 h-5 text-purple-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
-                        ) : (
+                        )}
+                        {/* Three-dot menu */}
+                        <div className="relative">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (confirm(`Delete "${playlist.name}"? This cannot be undone.`)) {
-                                deletePlaylist(playlist.id).then(() => {
-                                  loadPlaylists();
-                                  if (selectedPlaylist?.id === playlist.id) {
-                                    setSelectedPlaylist(null);
-                                  }
-                                  if (viewingPlaylist?.id === playlist.id) {
-                                    setViewingPlaylist(null);
-                                  }
-                                  showNotification(`Deleted "${playlist.name}"`);
-                                }).catch(() => {
-                                  showNotification('Failed to delete playlist', 'error');
-                                });
-                              }
+                              setPlaylistMenuOpen(playlistMenuOpen === playlist.id ? null : playlist.id);
                             }}
-                            className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-all"
-                            title="Delete playlist"
+                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-all"
                           >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                             </svg>
                           </button>
-                        )}
+                          {playlistMenuOpen === playlist.id && (
+                            <>
+                              {/* Backdrop to close menu */}
+                              <div
+                                className="fixed inset-0 z-40"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPlaylistMenuOpen(null);
+                                }}
+                              />
+                              {/* Dropdown menu */}
+                              <div className="absolute right-0 top-full mt-1 z-50 bg-gray-900 border border-white/20 rounded-lg shadow-xl py-1 min-w-[120px]">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPlaylistMenuOpen(null);
+                                    if (confirm(`Delete "${playlist.name}"? This cannot be undone.`)) {
+                                      deletePlaylist(playlist.id).then(() => {
+                                        loadPlaylists();
+                                        if (selectedPlaylist?.id === playlist.id) {
+                                          setSelectedPlaylist(null);
+                                        }
+                                        if (viewingPlaylist?.id === playlist.id) {
+                                          setViewingPlaylist(null);
+                                        }
+                                        showNotification(`Deleted "${playlist.name}"`);
+                                      }).catch(() => {
+                                        showNotification('Failed to delete playlist', 'error');
+                                      });
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/20 flex items-center gap-2"
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                  Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -2263,6 +2295,21 @@ function App() {
                     showDropOverlay={isGlobalDragging}
                   />
                 </div>
+
+                {/* Idle image overlay - shown when stopped or no videos */}
+                {selectedPlaylist?.idle_image_url && (
+                  isStopped ||
+                  (!player1Video && !player2Video) ||
+                  (!player1State.playing && !player2State.playing && !isAutoFading)
+                ) && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black">
+                    <img
+                      src={selectedPlaylist.idle_image_url}
+                      alt="Idle screen"
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  </div>
+                )}
 
                 {/* DJ Mute button */}
                 <button
