@@ -148,7 +148,7 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                 isPending
                   ? 'bg-yellow-500 text-white'
                   : isActive
-                  ? 'bg-green-500 text-white animate-pulse'
+                  ? 'bg-green-500 text-white'
                   : 'bg-white/10 text-white/60'
               }`}>
                 {isPending ? (
@@ -156,7 +156,7 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 ) : isActive ? (
-                  <svg className="w-4 h-4 animate-bounce" fill="currentColor" viewBox="0 0 24 24" style={{ animationDuration: '1s' }}>
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
                   </svg>
                 ) : (
@@ -184,12 +184,23 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                 )}
                 {isActive && !isPending && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                    <div className="flex gap-0.5">
-                      <span className="w-1 h-4 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-1 h-3 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></span>
-                      <span className="w-1 h-5 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }}></span>
-                      <span className="w-1 h-3 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: '450ms' }}></span>
+                    <div className="flex gap-0.5 items-end h-5">
+                      <span className="w-1 bg-green-400 rounded-full animate-equalizer" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-1 bg-green-400 rounded-full animate-equalizer" style={{ animationDelay: '180ms' }}></span>
+                      <span className="w-1 bg-green-400 rounded-full animate-equalizer" style={{ animationDelay: '360ms' }}></span>
+                      <span className="w-1 bg-green-400 rounded-full animate-equalizer" style={{ animationDelay: '540ms' }}></span>
                     </div>
+                    <style>{`
+                      @keyframes equalizer {
+                        0%, 100% { height: 4px; }
+                        25% { height: 16px; }
+                        50% { height: 8px; }
+                        75% { height: 20px; }
+                      }
+                      .animate-equalizer {
+                        animation: equalizer 0.8s ease-in-out infinite;
+                      }
+                    `}</style>
                   </div>
                 )}
               </div>
