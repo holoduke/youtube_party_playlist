@@ -11,6 +11,16 @@ const api = axios.create({
 
 // ==================== Auth API ====================
 
+export const register = async (username, email, password, passwordConfirmation) => {
+  const response = await api.post('/register', {
+    username,
+    email,
+    password,
+    password_confirmation: passwordConfirmation,
+  });
+  return response.data;
+};
+
 export const login = async (username, password) => {
   const response = await api.post('/login', { username, password });
   return response.data;

@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\YouTubePlaylistController;
 use Illuminate\Support\Facades\Route;
 
 // Authentication
+Route::post('/register', [UserController::class, 'register']);
 Route::post('/login', [UserController::class, 'login']);
 
 // Users

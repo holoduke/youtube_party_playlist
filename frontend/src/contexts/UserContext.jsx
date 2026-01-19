@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { login as apiLogin } from '../services/api';
+import { login as apiLogin, register as apiRegister } from '../services/api';
 
 const UserContext = createContext(null);
 
@@ -53,6 +53,14 @@ export function UserProvider({ children }) {
     return user;
   };
 
+  const register = async (username, email, password, passwordConfirmation) => {
+    const response = await apiRegister(username, email, password, passwordConfirmation);
+    const user = response.user;
+    setCurrentUser(user);
+    localStorage.setItem('barmania_user', JSON.stringify(user));
+    return user;
+  };
+
   const loginWithGoogle = () => {
     // Store current URL to return to after OAuth
     const returnUrl = window.location.origin + window.location.pathname;
@@ -75,6 +83,7 @@ export function UserProvider({ children }) {
     <UserContext.Provider value={{
       currentUser,
       login,
+      register,
       loginWithGoogle,
       logout,
       loading,
