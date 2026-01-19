@@ -628,12 +628,10 @@ function App() {
   const handleLogout = () => {
     // Stop and destroy player instances
     if (player1Ref.current) {
-      player1Ref.current.pause();
-      player1Ref.current.destroy?.();
+      player1Ref.current.destroy();
     }
     if (player2Ref.current) {
-      player2Ref.current.pause();
-      player2Ref.current.destroy?.();
+      player2Ref.current.destroy();
     }
 
     // Clear all player state

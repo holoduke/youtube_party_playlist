@@ -123,6 +123,22 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
         playerRef.current.pauseVideo();
       }
     },
+    destroy: () => {
+      console.log(`[Player ${playerNumber}] destroy() called`);
+      stopTimeTracking();
+      if (playerRef.current) {
+        try {
+          playerRef.current.pauseVideo();
+          playerRef.current.destroy();
+        } catch (e) {
+          console.log(`[Player ${playerNumber}] destroy error:`, e);
+        }
+        playerRef.current = null;
+      }
+      setIsPlayerReady(false);
+      setIsPlaying(false);
+      loadedVideoIdRef.current = null;
+    },
     loadVideo: (videoId, shouldAutoPlay = true) => {
       loadVideoInternal(videoId, shouldAutoPlay);
     },
@@ -131,7 +147,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     getDuration: () => duration,
     getRemainingTime: () => Math.max(0, duration - currentTime),
     isReady: () => isPlayerReady,
-  }), [isPlaying, currentTime, duration, isPlayerReady, loadVideoInternal, playerNumber]);
+  }), [isPlaying, currentTime, duration, isPlayerReady, loadVideoInternal, playerNumber, stopTimeTracking]);
 
   // Track if volume needs to be applied when player becomes ready
   const pendingVolumeRef = useRef(volume);
