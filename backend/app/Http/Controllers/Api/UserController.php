@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Playlist;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -26,6 +27,13 @@ class UserController extends Controller
             'name' => $request->username,
             'email' => $request->email,
             'password' => $request->password, // Will be hashed by the model's cast
+        ]);
+
+        // Create a default playlist for the new user
+        Playlist::create([
+            'name' => 'My Playlist',
+            'user_id' => $user->id,
+            'is_public' => false,
         ]);
 
         return response()->json([
