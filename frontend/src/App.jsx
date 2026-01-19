@@ -2403,17 +2403,17 @@ function App() {
                   onRemove={(videoId) => handleRemoveFromPlaylist(videoId, viewingPlaylist.id)}
                   activeVideoId={activeVideo?.id}
                   onQueue={(video) => {
-                    // Check if we're starting fresh (no videos currently playing)
-                    const isStartingFresh = !player1Video && !player2Video;
+                    // Check if nothing is currently playing
+                    const isAnythingPlaying = player1State.playing || player2State.playing;
 
-                    if (isStartingFresh) {
-                      // Starting fresh: load into player 1 and set crossfade to 0 (player 1 active)
-                      console.log(`[Queue] Starting fresh with "${video.title}" in Player 1`);
+                    if (!isAnythingPlaying) {
+                      // Nothing playing: load into player 1 and play directly
+                      console.log(`[Queue] Direct play "${video.title}" in Player 1 (nothing playing)`);
                       setPlayer1Video(video);
                       setRestoredVideoIds(prev => ({ ...prev, player1: null })); // null = autoplay
                       setCrossfadeValue(0); // Player 1 is now active
                     } else {
-                      // Queue video in the INACTIVE player (no fade)
+                      // Something is playing: queue in inactive player (no fade)
                       const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
                       const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
                       console.log(`[Queue] Loading "${video.title}" into Player ${inactivePlayer}`);
@@ -2431,17 +2431,17 @@ function App() {
                     setAutoPlayEnabled(true);
                   }}
                   onPlay={(video) => {
-                    // Check if we're starting fresh (no videos currently playing)
-                    const isStartingFresh = !player1Video && !player2Video;
+                    // Check if nothing is currently playing (no need to fade)
+                    const isAnythingPlaying = player1State.playing || player2State.playing;
 
-                    if (isStartingFresh) {
-                      // Starting fresh: load into player 1 and set crossfade to 0 (player 1 active)
-                      console.log(`[Play] Starting fresh with "${video.title}" in Player 1`);
+                    if (!isAnythingPlaying) {
+                      // Nothing playing: load into player 1 and play directly (no fade needed)
+                      console.log(`[Play] Direct play "${video.title}" in Player 1 (nothing playing)`);
                       setPlayer1Video(video);
                       setRestoredVideoIds(prev => ({ ...prev, player1: null })); // null = autoplay
                       setCrossfadeValue(0); // Player 1 is now active
                     } else {
-                      // Queue video in the INACTIVE player and immediately fade to it
+                      // Something is playing: queue in inactive player and fade to it
                       const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
                       const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
                       console.log(`[Play] Loading "${video.title}" into Player ${inactivePlayer} and fading`);
