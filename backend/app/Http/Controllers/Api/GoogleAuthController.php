@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Playlist;
 use App\Models\User;
 use App\Models\OAuthToken;
 use Illuminate\Http\Request;
@@ -61,6 +62,13 @@ class GoogleAuthController extends Controller
                 'google_id' => $googleUser->getId(),
                 'avatar' => $googleUser->getAvatar(),
                 'password' => null,
+            ]);
+
+            // Create a default playlist for the new user
+            Playlist::create([
+                'name' => 'My Playlist',
+                'user_id' => $user->id,
+                'is_public' => false,
             ]);
         }
 
