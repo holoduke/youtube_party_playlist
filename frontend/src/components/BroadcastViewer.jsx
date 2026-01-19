@@ -15,7 +15,7 @@ export default function BroadcastViewer() {
   const [isEnded, setIsEnded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [debugInfo, setDebugInfo] = useState({});
-  const [needsInteraction, setNeedsInteraction] = useState(false); // Set to true if autoplay fails
+  const [isMuted, setIsMuted] = useState(true); // Start muted for autoplay
   const [hasReceivedState, setHasReceivedState] = useState(false);
   const [startedAt, setStartedAt] = useState(null);
   const [fadeTrigger, setFadeTrigger] = useState(null);
@@ -94,6 +94,29 @@ export default function BroadcastViewer() {
         setPlayer2Playing(serverPlayer2Playing);
         setHasReceivedState(true);
 
+        // Force play if server says playing but client isn't
+        // This provides immediate sync on each poll
+        try {
+          if (serverPlayer1Playing && player1Ref.current) {
+            const state1 = player1Ref.current.getPlayerState?.();
+            // State 1 = playing, 3 = buffering - these are OK
+            // -1 = unstarted, 0 = ended, 2 = paused, 5 = cued
+            if (state1 !== 1 && state1 !== 3) {
+              console.log(`Poll sync: Player 1 should play but state=${state1}, forcing play`);
+              player1Ref.current.playVideo();
+            }
+          }
+          if (serverPlayer2Playing && player2Ref.current) {
+            const state2 = player2Ref.current.getPlayerState?.();
+            if (state2 !== 1 && state2 !== 3) {
+              console.log(`Poll sync: Player 2 should play but state=${state2}, forcing play`);
+              player2Ref.current.playVideo();
+            }
+          }
+        } catch (e) {
+          console.log('Poll sync play error:', e);
+        }
+
         // Check for new fade trigger from DJ app
         const serverFadeTrigger = serverState.fade_trigger;
         if (serverFadeTrigger && serverFadeTrigger.started_at !== lastFadeTriggerRef.current?.started_at) {
@@ -125,53 +148,63 @@ export default function BroadcastViewer() {
 
         // Sync playback time
         const SYNC_THRESHOLD = 5;
-        try {
-          // Player 1: Check for pause transition or drift
-          if (player1Ref.current && typeof player1Ref.current.seekTo === 'function') {
-            const wasPlaying1 = prevPlayer1PlayingRef.current;
-            const justPaused1 = wasPlaying1 && !serverPlayer1Playing;
 
-            if (justPaused1 && serverPlayer1Time > 0) {
-              // DJ just paused - pause viewer and seek to exact position
-              console.log(`Player 1 PAUSED: seeking to DJ position ${serverPlayer1Time.toFixed(1)}s`);
-              player1Ref.current.pauseVideo();
-              player1Ref.current.seekTo(serverPlayer1Time, true);
-            } else if (serverPlayer1Playing) {
-              // Playing - sync if drifted more than threshold
-              const diff1 = Math.abs(serverPlayer1Time - viewerPlayer1Time);
-              if (diff1 > SYNC_THRESHOLD && serverPlayer1Time > 0) {
-                console.log(`Player 1 time sync: DJ=${serverPlayer1Time.toFixed(1)}s, Viewer=${viewerPlayer1Time.toFixed(1)}s, diff=${diff1.toFixed(1)}s - seeking`);
-                player1Ref.current.seekTo(serverPlayer1Time, true);
-              }
+        // Helper to safely call player methods (iframe may be destroyed)
+        const safeSeek = (playerRef, time) => {
+          try {
+            if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+              playerRef.current.seekTo(time, true);
             }
+          } catch (e) {
+            // Player iframe was destroyed, ignore
           }
+        };
 
-          // Player 2: Check for pause transition or drift
-          if (player2Ref.current && typeof player2Ref.current.seekTo === 'function') {
-            const wasPlaying2 = prevPlayer2PlayingRef.current;
-            const justPaused2 = wasPlaying2 && !serverPlayer2Playing;
-
-            if (justPaused2 && serverPlayer2Time > 0) {
-              // DJ just paused - pause viewer and seek to exact position
-              console.log(`Player 2 PAUSED: seeking to DJ position ${serverPlayer2Time.toFixed(1)}s`);
-              player2Ref.current.pauseVideo();
-              player2Ref.current.seekTo(serverPlayer2Time, true);
-            } else if (serverPlayer2Playing) {
-              // Playing - sync if drifted more than threshold
-              const diff2 = Math.abs(serverPlayer2Time - viewerPlayer2Time);
-              if (diff2 > SYNC_THRESHOLD && serverPlayer2Time > 0) {
-                console.log(`Player 2 time sync: DJ=${serverPlayer2Time.toFixed(1)}s, Viewer=${viewerPlayer2Time.toFixed(1)}s, diff=${diff2.toFixed(1)}s - seeking`);
-                player2Ref.current.seekTo(serverPlayer2Time, true);
-              }
+        const safePause = (playerRef) => {
+          try {
+            if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
+              playerRef.current.pauseVideo();
             }
+          } catch (e) {
+            // Player iframe was destroyed, ignore
           }
+        };
 
-          // Update previous playing state refs
-          prevPlayer1PlayingRef.current = serverPlayer1Playing;
-          prevPlayer2PlayingRef.current = serverPlayer2Playing;
-        } catch (e) {
-          console.log('Seek error:', e);
+        // Player 1: Check for pause transition or drift
+        const wasPlaying1 = prevPlayer1PlayingRef.current;
+        const justPaused1 = wasPlaying1 && !serverPlayer1Playing;
+
+        if (justPaused1 && serverPlayer1Time > 0) {
+          console.log(`Player 1 PAUSED: seeking to DJ position ${serverPlayer1Time.toFixed(1)}s`);
+          safePause(player1Ref);
+          safeSeek(player1Ref, serverPlayer1Time);
+        } else if (serverPlayer1Playing) {
+          const diff1 = Math.abs(serverPlayer1Time - viewerPlayer1Time);
+          if (diff1 > SYNC_THRESHOLD && serverPlayer1Time > 0) {
+            console.log(`Player 1 time sync: DJ=${serverPlayer1Time.toFixed(1)}s, Viewer=${viewerPlayer1Time.toFixed(1)}s, diff=${diff1.toFixed(1)}s - seeking`);
+            safeSeek(player1Ref, serverPlayer1Time);
+          }
         }
+
+        // Player 2: Check for pause transition or drift
+        const wasPlaying2 = prevPlayer2PlayingRef.current;
+        const justPaused2 = wasPlaying2 && !serverPlayer2Playing;
+
+        if (justPaused2 && serverPlayer2Time > 0) {
+          console.log(`Player 2 PAUSED: seeking to DJ position ${serverPlayer2Time.toFixed(1)}s`);
+          safePause(player2Ref);
+          safeSeek(player2Ref, serverPlayer2Time);
+        } else if (serverPlayer2Playing) {
+          const diff2 = Math.abs(serverPlayer2Time - viewerPlayer2Time);
+          if (diff2 > SYNC_THRESHOLD && serverPlayer2Time > 0) {
+            console.log(`Player 2 time sync: DJ=${serverPlayer2Time.toFixed(1)}s, Viewer=${viewerPlayer2Time.toFixed(1)}s, diff=${diff2.toFixed(1)}s - seeking`);
+            safeSeek(player2Ref, serverPlayer2Time);
+          }
+        }
+
+        // Update previous playing state refs
+        prevPlayer1PlayingRef.current = serverPlayer1Playing;
+        prevPlayer2PlayingRef.current = serverPlayer2Playing;
 
         // Calculate elapsed time since video started
         const elapsedSeconds = serverStartedAt ? Math.floor((Date.now() - serverStartedAt) / 1000) : 0;
@@ -427,6 +460,8 @@ export default function BroadcastViewer() {
     playerVars: {
       autoplay: 1,  // Auto-start (muted to bypass browser restrictions)
       controls: 0,
+      disablekb: 1,  // Disable keyboard controls
+      fs: 0,  // Disable fullscreen button
       modestbranding: 1,
       rel: 0,
       showinfo: 0,
@@ -450,15 +485,8 @@ export default function BroadcastViewer() {
     console.log('Player 1 ready, djPlaying:', player1PlayingRef.current, 'crossfade:', crossfadeRef.current);
     player1Ref.current = event.target;
 
-    // Always start playing (muted autoplay is allowed)
+    // Start playing muted (autoplay allowed when muted)
     safePlayerCall(player1Ref, 'playVideo');
-
-    // Unmute after short delay and set volume
-    setTimeout(() => {
-      safePlayerCall(player1Ref, 'unMute');
-      safePlayerCall(player1Ref, 'setVolume', 100 - crossfadeRef.current);
-      safePlayerCall(player1Ref, 'playVideo');
-    }, 300);
 
     // Keep trying to play for a few seconds (in case of timing issues)
     for (let i = 1; i <= 3; i++) {
@@ -474,15 +502,8 @@ export default function BroadcastViewer() {
     console.log('Player 2 ready, djPlaying:', player2PlayingRef.current, 'crossfade:', crossfadeRef.current);
     player2Ref.current = event.target;
 
-    // Always start playing (muted autoplay is allowed)
+    // Start playing muted (autoplay allowed when muted)
     safePlayerCall(player2Ref, 'playVideo');
-
-    // Unmute after short delay and set volume
-    setTimeout(() => {
-      safePlayerCall(player2Ref, 'unMute');
-      safePlayerCall(player2Ref, 'setVolume', crossfadeRef.current);
-      safePlayerCall(player2Ref, 'playVideo');
-    }, 300);
 
     // Keep trying to play for a few seconds (in case of timing issues)
     for (let i = 1; i <= 3; i++) {
@@ -494,16 +515,14 @@ export default function BroadcastViewer() {
     }
   };
 
-  // Handle user click to start playback (required by browser autoplay policy)
-  const handleStartClick = () => {
-    setNeedsInteraction(false);
-    // Try to play both players
+  // Handle unmute button click
+  const handleUnmute = () => {
+    console.log('User clicked unmute');
+    setIsMuted(false);
     safePlayerCall(player1Ref, 'unMute');
     safePlayerCall(player1Ref, 'setVolume', 100 - crossfadeRef.current);
-    safePlayerCall(player1Ref, 'playVideo');
     safePlayerCall(player2Ref, 'unMute');
     safePlayerCall(player2Ref, 'setVolume', crossfadeRef.current);
-    safePlayerCall(player2Ref, 'playVideo');
   };
 
   if (loading && !isEnded) {
@@ -542,25 +561,23 @@ export default function BroadcastViewer() {
         </div>
       </div>
 
-      {/* Click to start overlay (required by browser autoplay policy) */}
-      {needsInteraction && (
-        <div
-          className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 cursor-pointer"
-          onClick={handleStartClick}
+      {/* Unmute button - shows when muted */}
+      {isMuted && (
+        <button
+          onClick={handleUnmute}
+          className="absolute top-4 right-4 z-40 flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full px-4 py-2 transition-colors cursor-pointer"
         >
-          <div className="text-center">
-            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
-              <svg className="w-12 h-12 text-white ml-2" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </div>
-            <p className="text-white/60 text-sm">Tap to start</p>
-          </div>
-        </div>
+          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <line x1="23" y1="9" x2="17" y2="15" />
+            <line x1="17" y1="9" x2="23" y2="15" />
+          </svg>
+          <span className="text-white text-sm font-medium">Tap to unmute</span>
+        </button>
       )}
 
-      {/* Dual video players - fullscreen overlapping */}
-      <div className="absolute inset-0">
+      {/* Dual video players - fullscreen overlapping, pointer-events disabled to prevent pause on click */}
+      <div className="absolute inset-0 pointer-events-none">
         {/* Player 1 - base layer */}
         <div
           className="absolute inset-0 z-10"
