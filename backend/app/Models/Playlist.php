@@ -14,6 +14,7 @@ class Playlist extends Model
         'is_public',
         'is_broadcasting',
         'broadcast_code',
+        'idle_image_path',
         'status',
         'share_code',
         'host_code',
@@ -22,6 +23,8 @@ class Playlist extends Model
         'likes',
         'hash',
     ];
+
+    protected $appends = ['idle_image_url'];
 
     protected $casts = [
         'is_public' => 'boolean',
@@ -32,6 +35,17 @@ class Playlist extends Model
     ];
 
     protected $hidden = ['host_code']; // Don't expose host code to guests
+
+    /**
+     * Get the full URL for the idle image.
+     */
+    public function getIdleImageUrlAttribute(): ?string
+    {
+        if (!$this->idle_image_path) {
+            return null;
+        }
+        return asset('storage/' . $this->idle_image_path);
+    }
 
     // Characters for URL-safe base64-like encoding (YouTube uses similar)
     private const HASH_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_';

@@ -7,6 +7,7 @@ use App\Models\Playlist;
 use App\Models\Video;
 use App\Events\PlaylistStateChanged;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class PlaylistController extends Controller
 {
@@ -76,7 +77,18 @@ class PlaylistController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
             'is_public' => 'nullable|boolean',
+            'idle_image_preset' => 'nullable|string|in:test-pattern,please-stand-by,be-right-back,no-signal',
         ]);
+
+        // Handle preset images
+        if (isset($validated['idle_image_preset'])) {
+            // Delete old custom image if exists (but not presets)
+            if ($playlist->idle_image_path && !str_starts_with($playlist->idle_image_path, 'presets/')) {
+                Storage::disk('public')->delete($playlist->idle_image_path);
+            }
+            $validated['idle_image_path'] = 'presets/' . $validated['idle_image_preset'] . '.png';
+            unset($validated['idle_image_preset']);
+        }
 
         $playlist->update($validated);
 
@@ -144,6 +156,46 @@ class PlaylistController extends Controller
         }
 
         return $playlist->load(['videos.categories']);
+    }
+
+    // ==================== IDLE IMAGE ENDPOINTS ====================
+
+    // POST /api/playlists/{playlist}/idle-image - Upload custom idle image
+    public function uploadIdleImage(Request $request, Playlist $playlist)
+    {
+        $request->validate([
+            'image' => 'required|image|mimes:jpeg,png,gif,webp|max:5120', // 5MB max
+        ]);
+
+        // Delete old custom image if exists (but not presets)
+        if ($playlist->idle_image_path && !str_starts_with($playlist->idle_image_path, 'presets/')) {
+            Storage::disk('public')->delete($playlist->idle_image_path);
+        }
+
+        // Store new image
+        $path = $request->file('image')->store(
+            "playlists/{$playlist->id}/idle",
+            'public'
+        );
+
+        $playlist->update(['idle_image_path' => $path]);
+
+        return response()->json([
+            'success' => true,
+            'idle_image_url' => $playlist->idle_image_url,
+        ]);
+    }
+
+    // DELETE /api/playlists/{playlist}/idle-image - Remove idle image
+    public function deleteIdleImage(Playlist $playlist)
+    {
+        if ($playlist->idle_image_path && !str_starts_with($playlist->idle_image_path, 'presets/')) {
+            Storage::disk('public')->delete($playlist->idle_image_path);
+        }
+
+        $playlist->update(['idle_image_path' => null]);
+
+        return response()->json(['success' => true]);
     }
 
     // ==================== LIVE SESSION ENDPOINTS ====================
@@ -408,6 +460,7 @@ class PlaylistController extends Controller
             'crossfade_value' => 'required|numeric|min:0|max:100',
             'started_at' => 'nullable|numeric',
             'fade_trigger' => 'nullable|array',
+            'is_stopped' => 'nullable|boolean',
         ]);
 
         $playlist->update([
@@ -421,6 +474,7 @@ class PlaylistController extends Controller
                 'crossfade_value' => $validated['crossfade_value'],
                 'started_at' => $validated['started_at'] ?? null,
                 'fade_trigger' => $validated['fade_trigger'] ?? null,
+                'is_stopped' => $validated['is_stopped'] ?? false,
                 'updated_at' => now()->toISOString(),
             ],
         ]);
@@ -446,6 +500,7 @@ class PlaylistController extends Controller
             'name' => $playlist->name,
             'state' => $playlist->state,
             'is_broadcasting' => true,
+            'idle_image_url' => $playlist->idle_image_url,
         ]);
     }
 }

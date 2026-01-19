@@ -13,6 +13,7 @@ import UserSelector from './components/UserSelector';
 import BroadcastModal from './components/BroadcastModal';
 import YouTubePlaylistImport from './components/YouTubePlaylistImport';
 import AccountSettings from './components/AccountSettings';
+import PlaylistSettingsModal from './components/PlaylistSettingsModal';
 
 function App() {
   const navigate = useNavigate();
@@ -76,11 +77,17 @@ function App() {
   const broadcastSyncTimeoutRef = useRef(null);
   const videoStartedAtRef = useRef(null); // Timestamp when current video started playing
 
+  // Stopped state (shows idle screen in viewer)
+  const [isStopped, setIsStopped] = useState(false);
+
   // DJ mute state (local only, doesn't affect viewers)
   const [djMuted, setDjMuted] = useState(false);
 
   // Account settings modal state
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+
+  // Playlist settings modal state
+  const [showPlaylistSettings, setShowPlaylistSettings] = useState(false);
 
   // Playlist modal state
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -351,6 +358,7 @@ function App() {
           started_at: videoStartedAtRef.current,
           // Fade trigger data - viewer will animate locally based on this
           fade_trigger: fadeTriggeredRef.current,
+          is_stopped: isStopped,
         });
       } catch (error) {
         console.error('Failed to sync broadcast state:', error);
@@ -362,7 +370,7 @@ function App() {
         clearTimeout(broadcastSyncTimeoutRef.current);
       }
     };
-  }, [isBroadcasting, selectedPlaylist, player1Video, player2Video, crossfadeValue, player1State.playing, player2State.playing, player1State.currentTime, player2State.currentTime]);
+  }, [isBroadcasting, selectedPlaylist, player1Video, player2Video, crossfadeValue, player1State.playing, player2State.playing, player1State.currentTime, player2State.currentTime, isStopped]);
 
   useEffect(() => {
     if (viewMode === 'categories') {
@@ -1027,6 +1035,7 @@ function App() {
         crossfade_value: startValue,
         started_at: videoStartedAtRef.current,
         fade_trigger: fadeTriggeredRef.current,
+        is_stopped: false, // Never stopped during fade
       }).catch(err => console.error('Failed to sync fade trigger:', err));
     }
 
@@ -1171,6 +1180,7 @@ function App() {
           crossfade_value: startValue,
           started_at: videoStartedAtRef.current,
           fade_trigger: fadeTriggeredRef.current,
+          is_stopped: false, // Never stopped during fade
         }).catch(err => console.error('Failed to sync auto-fade trigger:', err));
       }
 
@@ -1594,6 +1604,20 @@ function App() {
         showNotification={showNotification}
       />
 
+      {/* Playlist Settings Modal */}
+      <PlaylistSettingsModal
+        isOpen={showPlaylistSettings}
+        onClose={() => setShowPlaylistSettings(false)}
+        playlist={selectedPlaylist}
+        onPlaylistUpdated={async () => {
+          if (selectedPlaylist) {
+            const updated = await getPlaylist(selectedPlaylist.id);
+            setSelectedPlaylist(updated);
+          }
+        }}
+        showNotification={showNotification}
+      />
+
       {/* Playlist Selection Modal */}
       {showPlaylistModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
@@ -1987,6 +2011,23 @@ function App() {
                     </button>
                   )}
 
+                  {/* Settings Button */}
+                  {selectedPlaylist && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowPlaylistSettings(true);
+                      }}
+                      className="p-2 rounded-lg bg-white/10 text-purple-300/60 hover:bg-white/20 hover:text-white transition-all flex-shrink-0"
+                      title="Playlist Settings"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </button>
+                  )}
+
                   {/* Broadcast Button */}
                   {selectedPlaylist && (
                     <button
@@ -2029,7 +2070,7 @@ function App() {
                 {/* Playback Controls */}
                 <div className="p-3">
                   {/* Now Playing Info */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 mb-3">
                     {/* Thumbnail */}
                     {activeVideo ? (
                       <div className="relative w-14 h-9 rounded-lg overflow-hidden bg-black/50 flex-shrink-0">
@@ -2065,67 +2106,95 @@ function App() {
                         )}
                       </div>
                     </div>
+                  </div>
 
-                    {/* Play/Pause & Crossfade Controls */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={toggleActivePlayer}
-                        disabled={!activeVideo && (!selectedPlaylist?.videos?.length)}
-                        className={`p-2 rounded-lg transition-colors ${
-                          activeVideo || selectedPlaylist?.videos?.length
-                            ? activePlayerState.playing
-                              ? 'bg-purple-500 text-white'
-                              : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
-                            : 'bg-white/5 text-white/30 cursor-not-allowed'
-                        }`}
-                        title={activePlayerState.playing ? 'Pause' : 'Play'}
-                      >
-                        {activePlayerState.playing ? (
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6" />
-                          </svg>
-                        ) : (
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                          </svg>
-                        )}
-                      </button>
-                      <button
-                        onClick={skipToNextWithFade}
-                        disabled={isAutoFading || (!player1Video && !player2Video)}
-                        className={`p-2 rounded-lg transition-colors ${
-                          !isAutoFading && (player1Video || player2Video)
-                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400'
-                            : 'bg-white/5 text-white/30 cursor-not-allowed'
-                        }`}
-                        title="Crossfade to other player (8s)"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  {/* Control Buttons */}
+                  <div className="flex items-center gap-2">
+                    {/* Play/Pause */}
+                    <button
+                      onClick={() => {
+                        setIsStopped(false);
+                        toggleActivePlayer();
+                      }}
+                      disabled={!activeVideo && (!selectedPlaylist?.videos?.length)}
+                      className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                        activeVideo || selectedPlaylist?.videos?.length
+                          ? activePlayerState.playing
+                            ? 'bg-purple-500 text-white'
+                            : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
+                          : 'bg-white/5 text-white/30 cursor-not-allowed'
+                      }`}
+                      title={activePlayerState.playing ? 'Pause' : 'Play'}
+                    >
+                      {activePlayerState.playing ? (
+                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                          <rect x="6" y="5" width="4" height="14" rx="1" />
+                          <rect x="14" y="5" width="4" height="14" rx="1" />
                         </svg>
-                      </button>
-                      <button
-                        onClick={() => setAutoQueueEnabled(prev => !prev)}
-                        className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
-                          autoQueueEnabled
-                            ? 'bg-green-500/30 text-green-300 hover:bg-green-500/50'
-                            : 'bg-white/10 text-white/50 hover:bg-white/20'
-                        }`}
-                        title={autoQueueEnabled ? 'Auto-queue ON: Next video loads after fade' : 'Auto-queue OFF: Manual loading only'}
-                      >
-                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                          {/* Clock face */}
-                          <circle cx="12" cy="12" r="5" />
-                          {/* Clock hands */}
-                          <path d="M12 8v4l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" className={autoQueueEnabled ? 'stroke-green-900' : 'stroke-gray-900'} />
-                          {/* Rotating arrows */}
-                          <path d="M20.5 12a8.5 8.5 0 0 1-8.5 8.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M12 23l2-2.5-2.5-.5" fill="currentColor" />
-                          <path d="M3.5 12A8.5 8.5 0 0 1 12 3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          <path d="M12 1l-2 2.5 2.5.5" fill="currentColor" />
+                      ) : (
+                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
                         </svg>
-                      </button>
-                    </div>
+                      )}
+                    </button>
+
+                    {/* Stop */}
+                    <button
+                      onClick={() => {
+                        if (player1Ref.current) player1Ref.current.pause();
+                        if (player2Ref.current) player2Ref.current.pause();
+                        setIsStopped(true);
+                      }}
+                      disabled={!activeVideo && (!selectedPlaylist?.videos?.length)}
+                      className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                        activeVideo || selectedPlaylist?.videos?.length
+                          ? isStopped
+                            ? 'bg-red-500/50 text-red-200'
+                            : 'bg-white/10 text-white/60 hover:bg-red-500/30 hover:text-red-300'
+                          : 'bg-white/5 text-white/30 cursor-not-allowed'
+                      }`}
+                      title="Stop (show idle screen)"
+                    >
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="6" width="12" height="12" rx="1" />
+                      </svg>
+                    </button>
+
+                    {/* Crossfade to Next */}
+                    <button
+                      onClick={skipToNextWithFade}
+                      disabled={isAutoFading || (!player1Video && !player2Video)}
+                      className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                        !isAutoFading && (player1Video || player2Video)
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400'
+                          : 'bg-white/5 text-white/30 cursor-not-allowed'
+                      }`}
+                      title="Crossfade to next (8s)"
+                    >
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M5 5v14l7-7zM12 5v14l7-7z" />
+                      </svg>
+                    </button>
+
+                    {/* Auto Queue Toggle */}
+                    <button
+                      onClick={() => setAutoQueueEnabled(prev => !prev)}
+                      className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                        autoQueueEnabled
+                          ? 'bg-green-500/30 text-green-300 hover:bg-green-500/50'
+                          : 'bg-white/10 text-white/50 hover:bg-white/20'
+                      }`}
+                      title={autoQueueEnabled ? 'Auto-queue ON' : 'Auto-queue OFF'}
+                    >
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="5" />
+                        <path d="M12 8v4l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" className={autoQueueEnabled ? 'stroke-green-900' : 'stroke-gray-900'} />
+                        <path d="M20.5 12a8.5 8.5 0 0 1-8.5 8.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        <path d="M12 23l2-2.5-2.5-.5" fill="currentColor" />
+                        <path d="M3.5 12A8.5 8.5 0 0 1 12 3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        <path d="M12 1l-2 2.5 2.5.5" fill="currentColor" />
+                      </svg>
+                    </button>
                   </div>
 
                   {/* Next Up */}

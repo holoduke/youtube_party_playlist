@@ -30,6 +30,8 @@ Route::apiResource('playlists', PlaylistController::class);
 Route::post('/playlists/{playlist}/videos', [PlaylistController::class, 'addVideo']);
 Route::delete('/playlists/{playlist}/videos/{video}', [PlaylistController::class, 'removeVideo']);
 Route::put('/playlists/{playlist}/reorder', [PlaylistController::class, 'reorderVideos']);
+Route::post('/playlists/{playlist}/idle-image', [PlaylistController::class, 'uploadIdleImage']);
+Route::delete('/playlists/{playlist}/idle-image', [PlaylistController::class, 'deleteIdleImage']);
 
 // Live session management
 Route::get('/playlists/live', [PlaylistController::class, 'liveIndex']);

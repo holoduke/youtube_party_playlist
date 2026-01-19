@@ -26,6 +26,10 @@ export default function BroadcastViewer() {
   // This prevents YouTube component from re-initializing when videos change
   const [initialPlayer1VideoId, setInitialPlayer1VideoId] = useState(null);
   const [initialPlayer2VideoId, setInitialPlayer2VideoId] = useState(null);
+  // Idle screen image URL from playlist settings
+  const [idleImageUrl, setIdleImageUrl] = useState(null);
+  // Stopped state from DJ (shows idle screen)
+  const [isStopped, setIsStopped] = useState(false);
 
   const player1Ref = useRef(null);
   const player2Ref = useRef(null);
@@ -86,6 +90,7 @@ export default function BroadcastViewer() {
         }
 
         setPlaylistName(data.name);
+        setIdleImageUrl(data.idle_image_url || null);
         setLoading(false);
 
         const serverState = data.state;
@@ -101,6 +106,9 @@ export default function BroadcastViewer() {
         // DJ app playback times
         const serverPlayer1Time = serverState.player1_time ?? 0;
         const serverPlayer2Time = serverState.player2_time ?? 0;
+        // Stopped state (shows idle screen)
+        const serverIsStopped = serverState.is_stopped ?? false;
+        setIsStopped(serverIsStopped);
 
         // Update player 1 if video changed
         if (serverPlayer1Video?.youtube_id !== player1SeenVideoIdRef.current) {
@@ -824,6 +832,21 @@ export default function BroadcastViewer() {
           )}
         </button>
       </div>
+
+      {/* Idle Screen Overlay - shows when stopped, not playing, or no videos loaded */}
+      {idleImageUrl && (
+        isStopped ||
+        (!initialPlayer1VideoId && !initialPlayer2VideoId) ||
+        (hasReceivedState && !player1Playing && !player2Playing && !fadeTrigger)
+      ) && (
+        <div className="absolute inset-0 z-25 flex items-center justify-center bg-black">
+          <img
+            src={idleImageUrl}
+            alt="Idle screen"
+            className="max-w-full max-h-full object-contain"
+          />
+        </div>
+      )}
 
       {/* Dual video players - fullscreen overlapping, pointer-events disabled to prevent pause on click */}
       <div className="absolute inset-0 pointer-events-none">

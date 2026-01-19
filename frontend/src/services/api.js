@@ -107,6 +107,40 @@ export const deletePlaylist = async (id) => {
   return response.data;
 };
 
+// ==================== Playlist Idle Image API ====================
+
+// Preset image definitions
+export const IDLE_IMAGE_PRESETS = [
+  { id: 'test-pattern', name: 'Test Pattern' },
+  { id: 'please-stand-by', name: 'Please Stand By' },
+  { id: 'be-right-back', name: 'Be Right Back' },
+  { id: 'no-signal', name: 'No Signal' },
+];
+
+// Get preset image URL
+export const getPresetImageUrl = (presetId) => {
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  return `${API_BASE_URL}/storage/presets/${presetId}.png`;
+};
+
+// Upload custom idle image for playlist
+export const uploadPlaylistIdleImage = async (playlistId, imageFile) => {
+  const formData = new FormData();
+  formData.append('image', imageFile);
+  const response = await api.post(`/playlists/${playlistId}/idle-image`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+// Remove idle image from playlist
+export const deletePlaylistIdleImage = async (playlistId) => {
+  const response = await api.delete(`/playlists/${playlistId}/idle-image`);
+  return response.data;
+};
+
 export const addVideoToPlaylist = async (playlistId, videoId) => {
   const response = await api.post(`/playlists/${playlistId}/videos`, { video_id: videoId });
   return response.data;
