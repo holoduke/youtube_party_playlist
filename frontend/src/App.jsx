@@ -626,15 +626,36 @@ function App() {
   };
 
   const handleLogout = () => {
+    // Stop and destroy player instances
+    if (player1Ref.current) {
+      player1Ref.current.pause();
+      player1Ref.current.destroy?.();
+    }
+    if (player2Ref.current) {
+      player2Ref.current.pause();
+      player2Ref.current.destroy?.();
+    }
+
     // Clear all player state
     setPlayer1Video(null);
     setPlayer2Video(null);
+    setPlayer1State({ playing: false, currentTime: 0, duration: 0 });
+    setPlayer2State({ playing: false, currentTime: 0, duration: 0 });
     setAutoPlayEnabled(false);
     setIsAutoFading(false);
     setActivePlaylist(null);
     setPlaylistMode(false);
     setSelectedPlaylist(null);
+    setViewingPlaylist(null);
     setCrossfadeValue(50);
+
+    // Stop broadcasting if active
+    if (isBroadcasting && selectedPlaylist) {
+      stopBroadcast(selectedPlaylist.id).catch(() => {});
+    }
+    setIsBroadcasting(false);
+    setBroadcastHash(null);
+    setBroadcastCode(null);
 
     // Clear any running intervals
     if (autoFadeIntervalRef.current) {
