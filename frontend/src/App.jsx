@@ -2143,10 +2143,6 @@ function App() {
                     </div>
                   )}
 
-                  {/* Crossfader */}
-                  <div className="pt-3 mt-3 border-t border-white/10">
-                    <Crossfader value={crossfadeValue} onChange={setCrossfadeValue} />
-                  </div>
                 </div>
               </div>
 
