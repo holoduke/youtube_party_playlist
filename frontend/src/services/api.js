@@ -38,6 +38,11 @@ export const getUser = async (id) => {
   return response.data;
 };
 
+export const deleteUser = async (id) => {
+  const response = await api.delete(`/users/${id}`);
+  return response.data;
+};
+
 // ==================== Category API ====================
 
 export const getCategories = async () => {

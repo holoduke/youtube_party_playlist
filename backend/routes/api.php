@@ -17,6 +17,7 @@ Route::post('/login', [UserController::class, 'login']);
 // Users
 Route::get('/users', [UserController::class, 'index']);
 Route::get('/users/{user}', [UserController::class, 'show']);
+Route::delete('/users/{user}', [UserController::class, 'destroy']);
 
 // Categories and Videos
 Route::apiResource('categories', CategoryController::class)->only(['index', 'show']);

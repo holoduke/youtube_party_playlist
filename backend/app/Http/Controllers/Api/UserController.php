@@ -82,4 +82,21 @@ class UserController extends Controller
             $query->withCount('videos');
         }]);
     }
+
+    // DELETE /api/users/{user} - Delete user and all their data
+    public function destroy(User $user)
+    {
+        // Delete all user's playlists (cascade will handle playlist_video pivot)
+        $user->playlists()->delete();
+
+        // Delete OAuth tokens if any
+        if (method_exists($user, 'oauthTokens')) {
+            $user->oauthTokens()->delete();
+        }
+
+        // Delete the user
+        $user->delete();
+
+        return response()->json(['message' => 'Account and all data deleted successfully']);
+    }
 }
