@@ -2403,16 +2403,27 @@ function App() {
                   onRemove={(videoId) => handleRemoveFromPlaylist(videoId, viewingPlaylist.id)}
                   activeVideoId={activeVideo?.id}
                   onQueue={(video) => {
-                    // Queue video in the INACTIVE player (no fade)
-                    const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
-                    const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
-                    console.log(`[Queue] Loading "${video.title}" into Player ${inactivePlayer}`);
-                    if (inactivePlayer === 1) {
+                    // Check if we're starting fresh (no videos currently playing)
+                    const isStartingFresh = !player1Video && !player2Video;
+
+                    if (isStartingFresh) {
+                      // Starting fresh: load into player 1 and set crossfade to 0 (player 1 active)
+                      console.log(`[Queue] Starting fresh with "${video.title}" in Player 1`);
                       setPlayer1Video(video);
-                      setRestoredVideoIds(prev => ({ ...prev, player1: video.youtube_id }));
+                      setRestoredVideoIds(prev => ({ ...prev, player1: null })); // null = autoplay
+                      setCrossfadeValue(0); // Player 1 is now active
                     } else {
-                      setPlayer2Video(video);
-                      setRestoredVideoIds(prev => ({ ...prev, player2: video.youtube_id }));
+                      // Queue video in the INACTIVE player (no fade)
+                      const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
+                      const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
+                      console.log(`[Queue] Loading "${video.title}" into Player ${inactivePlayer}`);
+                      if (inactivePlayer === 1) {
+                        setPlayer1Video(video);
+                        setRestoredVideoIds(prev => ({ ...prev, player1: video.youtube_id }));
+                      } else {
+                        setPlayer2Video(video);
+                        setRestoredVideoIds(prev => ({ ...prev, player2: video.youtube_id }));
+                      }
                     }
                     // Set playlist mode
                     setActivePlaylist(viewingPlaylist);
@@ -2420,25 +2431,36 @@ function App() {
                     setAutoPlayEnabled(true);
                   }}
                   onPlay={(video) => {
-                    // Queue video in the INACTIVE player and immediately fade to it
-                    const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
-                    const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
-                    console.log(`[Play] Loading "${video.title}" into Player ${inactivePlayer} and fading`);
-                    if (inactivePlayer === 1) {
+                    // Check if we're starting fresh (no videos currently playing)
+                    const isStartingFresh = !player1Video && !player2Video;
+
+                    if (isStartingFresh) {
+                      // Starting fresh: load into player 1 and set crossfade to 0 (player 1 active)
+                      console.log(`[Play] Starting fresh with "${video.title}" in Player 1`);
                       setPlayer1Video(video);
                       setRestoredVideoIds(prev => ({ ...prev, player1: null })); // null = autoplay
+                      setCrossfadeValue(0); // Player 1 is now active
                     } else {
-                      setPlayer2Video(video);
-                      setRestoredVideoIds(prev => ({ ...prev, player2: null })); // null = autoplay
+                      // Queue video in the INACTIVE player and immediately fade to it
+                      const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
+                      const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
+                      console.log(`[Play] Loading "${video.title}" into Player ${inactivePlayer} and fading`);
+                      if (inactivePlayer === 1) {
+                        setPlayer1Video(video);
+                        setRestoredVideoIds(prev => ({ ...prev, player1: null })); // null = autoplay
+                      } else {
+                        setPlayer2Video(video);
+                        setRestoredVideoIds(prev => ({ ...prev, player2: null })); // null = autoplay
+                      }
+                      // Start fade after a short delay to let the video load
+                      setTimeout(() => {
+                        skipToNextWithFade();
+                      }, 500);
                     }
                     // Set playlist mode
                     setActivePlaylist(viewingPlaylist);
                     setPlaylistMode(true);
                     setAutoPlayEnabled(true);
-                    // Start fade after a short delay to let the video load
-                    setTimeout(() => {
-                      skipToNextWithFade();
-                    }, 500);
                   }}
                 />
               ) : (
