@@ -151,8 +151,36 @@ function App() {
     };
   }, []);
 
-  // Check if clipboard API is available (button always shows if supported)
-  const clipboardSupported = typeof navigator?.clipboard?.readText === 'function';
+  // Clipboard state - only show button when valid YouTube URL is in clipboard
+  const [clipboardYoutubeUrl, setClipboardYoutubeUrl] = useState(null);
+
+  // Check clipboard for YouTube URLs on focus
+  useEffect(() => {
+    const checkClipboard = async () => {
+      try {
+        const text = await navigator.clipboard?.readText();
+        if (text && extractYouTubeVideoId(text.trim())) {
+          setClipboardYoutubeUrl(text.trim());
+        } else {
+          setClipboardYoutubeUrl(null);
+        }
+      } catch {
+        // Clipboard access denied or not available
+        setClipboardYoutubeUrl(null);
+      }
+    };
+
+    // Check on mount and when window gains focus
+    checkClipboard();
+    window.addEventListener('focus', checkClipboard);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkClipboard();
+    });
+
+    return () => {
+      window.removeEventListener('focus', checkClipboard);
+    };
+  }, []);
 
   // Get the live session URL
   const getLiveUrl = (shareCode) => {
@@ -1916,12 +1944,14 @@ function App() {
               {playlistModalTab === 'import' && (
                 <YouTubePlaylistImport
                   currentPlaylist={selectedPlaylist}
-                  onImportComplete={(playlist, importedCount) => {
-                    // Refresh playlists and select the imported/updated one
+                  onImportComplete={async (playlist, importedCount) => {
+                    // Refresh playlists list
                     loadPlaylists();
-                    setSelectedPlaylist(playlist);
+                    // Reload the full playlist with videos
+                    const updated = await getPlaylist(playlist.id);
+                    setSelectedPlaylist(updated);
                     setShowPlaylistModal(false);
-                    showNotification(`Added ${importedCount || playlist.videos?.length || 0} videos to "${playlist.name}"`);
+                    showNotification(`Added ${importedCount || 0} videos to "${playlist.name}"`);
                   }}
                   onClose={() => setShowPlaylistModal(false)}
                 />
@@ -2460,25 +2490,16 @@ function App() {
                   )}
                   </div>
 
-                  {/* Paste from clipboard button */}
-                  {clipboardSupported && (
+                  {/* Paste from clipboard button - only shows when valid YouTube URL detected */}
+                  {clipboardYoutubeUrl && (
                     <button
                       type="button"
-                      onClick={async () => {
-                        try {
-                          const text = await navigator.clipboard.readText();
-                          if (text && text.trim()) {
-                            handleYoutubeSearchInput(text.trim());
-                            setShowYoutubeDropdown(true);
-                          } else {
-                            showNotification('Clipboard is empty', 'error');
-                          }
-                        } catch (err) {
-                          console.error('Failed to read clipboard:', err);
-                          showNotification('Cannot access clipboard', 'error');
-                        }
+                      onClick={() => {
+                        handleYoutubeSearchInput(clipboardYoutubeUrl);
+                        setShowYoutubeDropdown(true);
+                        setClipboardYoutubeUrl(null); // Clear after use
                       }}
-                      className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white/70 hover:text-white transition-colors text-sm whitespace-nowrap"
+                      className="flex items-center gap-2 px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 rounded-lg text-purple-300 hover:text-white transition-colors text-sm whitespace-nowrap"
                       title="Add video from clipboard URL"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
