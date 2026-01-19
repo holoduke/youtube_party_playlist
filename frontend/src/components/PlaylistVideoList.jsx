@@ -148,7 +148,7 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                 isPending
                   ? 'bg-yellow-500 text-white'
                   : isActive
-                  ? 'bg-green-500 text-white'
+                  ? 'bg-green-500 text-white animate-pulse'
                   : 'bg-white/10 text-white/60'
               }`}>
                 {isPending ? (
@@ -156,7 +156,7 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 ) : isActive ? (
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 animate-bounce" fill="currentColor" viewBox="0 0 24 24" style={{ animationDuration: '1s' }}>
                     <path d="M8 5v14l11-7z" />
                   </svg>
                 ) : (
