@@ -1811,12 +1811,13 @@ function App() {
               {/* Import from YouTube Tab */}
               {playlistModalTab === 'import' && (
                 <YouTubePlaylistImport
-                  onImportComplete={(playlist) => {
-                    // Refresh playlists and select the imported one
+                  currentPlaylist={selectedPlaylist}
+                  onImportComplete={(playlist, importedCount) => {
+                    // Refresh playlists and select the imported/updated one
                     loadPlaylists();
                     setSelectedPlaylist(playlist);
                     setShowPlaylistModal(false);
-                    showNotification(`Imported "${playlist.name}" with ${playlist.videos?.length || 0} videos`);
+                    showNotification(`Added ${importedCount || playlist.videos?.length || 0} videos to "${playlist.name}"`);
                   }}
                   onClose={() => setShowPlaylistModal(false)}
                 />

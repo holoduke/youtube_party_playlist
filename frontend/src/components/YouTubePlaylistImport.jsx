@@ -6,7 +6,7 @@ import {
   importYouTubePlaylist
 } from '../services/api';
 
-export default function YouTubePlaylistImport({ onImportComplete, onClose }) {
+export default function YouTubePlaylistImport({ onImportComplete, onClose, currentPlaylist }) {
   const { currentUser, loginWithGoogle } = useUser();
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
@@ -16,6 +16,7 @@ export default function YouTubePlaylistImport({ onImportComplete, onClose }) {
   const [error, setError] = useState(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isPublic, setIsPublic] = useState(false);
+  const [importMode, setImportMode] = useState(currentPlaylist ? 'current' : 'new'); // 'current' or 'new'
 
   useEffect(() => {
     if (currentUser?.has_youtube_access) {
@@ -56,7 +57,8 @@ export default function YouTubePlaylistImport({ onImportComplete, onClose }) {
   };
 
   const handleImport = async () => {
-    if (!selectedPlaylist || !newPlaylistName.trim()) return;
+    if (!selectedPlaylist) return;
+    if (importMode === 'new' && !newPlaylistName.trim()) return;
 
     setImporting(true);
     setError(null);
@@ -64,10 +66,11 @@ export default function YouTubePlaylistImport({ onImportComplete, onClose }) {
       const result = await importYouTubePlaylist(
         currentUser.id,
         selectedPlaylist.youtube_id,
-        newPlaylistName.trim(),
-        isPublic
+        importMode === 'new' ? newPlaylistName.trim() : null,
+        isPublic,
+        importMode === 'current' ? currentPlaylist?.id : null
       );
-      onImportComplete?.(result.playlist);
+      onImportComplete?.(result.playlist, result.imported_count);
       onClose?.();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to import playlist');
@@ -190,28 +193,71 @@ export default function YouTubePlaylistImport({ onImportComplete, onClose }) {
             </div>
           ) : (
             <>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-white/80 mb-1">
-                  Playlist Name
-                </label>
-                <input
-                  type="text"
-                  value={newPlaylistName}
-                  onChange={(e) => setNewPlaylistName(e.target.value)}
-                  className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-purple-500"
-                  placeholder="Enter playlist name"
-                />
-              </div>
+              {/* Import mode selection */}
+              {currentPlaylist && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-white/80 mb-2">
+                    Import to
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setImportMode('current')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        importMode === 'current'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-white/10 text-white/70 hover:bg-white/20'
+                      }`}
+                    >
+                      Current playlist
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportMode('new')}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                        importMode === 'new'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-white/10 text-white/70 hover:bg-white/20'
+                      }`}
+                    >
+                      New playlist
+                    </button>
+                  </div>
+                  {importMode === 'current' && (
+                    <p className="mt-2 text-sm text-white/50">
+                      Adding to: <span className="text-purple-400">{currentPlaylist.name}</span>
+                    </p>
+                  )}
+                </div>
+              )}
 
-              <label className="flex items-center gap-2 mb-4 text-white/80 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                  className="w-4 h-4 rounded border-white/20 bg-white/10 text-purple-600 focus:ring-purple-500"
-                />
-                Make playlist public
-              </label>
+              {/* New playlist options */}
+              {importMode === 'new' && (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-white/80 mb-1">
+                      Playlist Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newPlaylistName}
+                      onChange={(e) => setNewPlaylistName(e.target.value)}
+                      className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                      placeholder="Enter playlist name"
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-2 mb-4 text-white/80 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isPublic}
+                      onChange={(e) => setIsPublic(e.target.checked)}
+                      className="w-4 h-4 rounded border-white/20 bg-white/10 text-purple-600 focus:ring-purple-500"
+                    />
+                    Make playlist public
+                  </label>
+                </>
+              )}
 
               <div className="mb-4">
                 <div className="text-white/60 text-sm mb-2">
@@ -244,7 +290,7 @@ export default function YouTubePlaylistImport({ onImportComplete, onClose }) {
                 </button>
                 <button
                   onClick={handleImport}
-                  disabled={importing || !newPlaylistName.trim() || playlistVideos.length === 0}
+                  disabled={importing || (importMode === 'new' && !newPlaylistName.trim()) || playlistVideos.length === 0}
                   className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   {importing ? (
@@ -255,6 +301,8 @@ export default function YouTubePlaylistImport({ onImportComplete, onClose }) {
                       </svg>
                       Importing...
                     </span>
+                  ) : importMode === 'current' ? (
+                    `Add ${playlistVideos.length} Videos`
                   ) : (
                     `Import ${playlistVideos.length} Videos`
                   )}

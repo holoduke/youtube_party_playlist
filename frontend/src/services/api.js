@@ -276,12 +276,13 @@ export const getYouTubePlaylistItems = async (userId, playlistId) => {
 };
 
 // Import a YouTube playlist into the app
-export const importYouTubePlaylist = async (userId, youtubePlaylistId, playlistName, isPublic = false) => {
+export const importYouTubePlaylist = async (userId, youtubePlaylistId, playlistName, isPublic = false, targetPlaylistId = null) => {
   const response = await api.post('/youtube/import-playlist', {
     user_id: userId,
     youtube_playlist_id: youtubePlaylistId,
     playlist_name: playlistName,
     is_public: isPublic,
+    target_playlist_id: targetPlaylistId,
   });
   return response.data;
 };

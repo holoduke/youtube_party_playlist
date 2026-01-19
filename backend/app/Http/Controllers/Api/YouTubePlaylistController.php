@@ -73,8 +73,9 @@ class YouTubePlaylistController extends Controller
         $request->validate([
             'user_id' => 'required|exists:users,id',
             'youtube_playlist_id' => 'required|string',
-            'playlist_name' => 'required|string|max:255',
+            'playlist_name' => 'nullable|string|max:255',
             'is_public' => 'nullable|boolean',
+            'target_playlist_id' => 'nullable|exists:playlists,id',
         ]);
 
         $user = User::findOrFail($request->user_id);
@@ -83,13 +84,21 @@ class YouTubePlaylistController extends Controller
             // Fetch videos from YouTube
             $youtubeVideos = $this->youtube->getPlaylistItems($user, $request->youtube_playlist_id);
 
-            // Create local playlist
-            $playlist = Playlist::create([
-                'name' => $request->playlist_name,
-                'user_id' => $user->id,
-                'is_public' => $request->is_public ?? false,
-                'description' => 'Imported from YouTube',
-            ]);
+            // Either use existing playlist or create new one
+            if ($request->target_playlist_id) {
+                $playlist = Playlist::findOrFail($request->target_playlist_id);
+                // Get current max position
+                $maxPosition = $playlist->videos()->max('position') ?? -1;
+            } else {
+                // Create local playlist
+                $playlist = Playlist::create([
+                    'name' => $request->playlist_name ?? 'Imported Playlist',
+                    'user_id' => $user->id,
+                    'is_public' => $request->is_public ?? false,
+                    'description' => 'Imported from YouTube',
+                ]);
+                $maxPosition = -1;
+            }
 
             // Import each video
             $importedCount = 0;
@@ -103,8 +112,13 @@ class YouTubePlaylistController extends Controller
                     ]
                 );
 
+                // Skip if video already in playlist
+                if ($playlist->videos()->where('video_id', $video->id)->exists()) {
+                    continue;
+                }
+
                 // Add to playlist with position
-                $playlist->videos()->attach($video->id, ['position' => $index]);
+                $playlist->videos()->attach($video->id, ['position' => $maxPosition + 1 + $index]);
                 $importedCount++;
             }
 
@@ -112,6 +126,7 @@ class YouTubePlaylistController extends Controller
                 'success' => true,
                 'playlist' => $playlist->load('videos'),
                 'imported_count' => $importedCount,
+                'added_to_existing' => (bool) $request->target_playlist_id,
             ], 201);
 
         } catch (\Exception $e) {
