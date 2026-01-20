@@ -9,6 +9,7 @@ export default function PlaybackControls({
   isStopped,
   isAutoFading,
   hasAnyVideo,
+  hasVideoToFadeTo,
   hasPlaylistVideos,
   autoQueueEnabled,
   onToggleAutoQueue,
@@ -119,9 +120,9 @@ export default function PlaybackControls({
         {/* Crossfade to Next */}
         <button
           onClick={onSkipToNext}
-          disabled={isAutoFading || !hasAnyVideo}
+          disabled={isAutoFading || !hasVideoToFadeTo}
           className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-            !isAutoFading && hasAnyVideo
+            !isAutoFading && hasVideoToFadeTo
               ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400'
               : 'bg-white/5 text-white/30 cursor-not-allowed'
           }`}

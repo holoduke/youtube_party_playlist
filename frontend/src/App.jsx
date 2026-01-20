@@ -1915,6 +1915,7 @@ function App() {
                   isStopped={isStopped}
                   isAutoFading={isAutoFading}
                   hasAnyVideo={player1Video || player2Video}
+                  hasVideoToFadeTo={activePlayer === 1 ? !!player2Video : !!player1Video}
                   hasPlaylistVideos={!!selectedPlaylist?.videos?.length}
                   autoQueueEnabled={autoQueueEnabled}
                   onToggleAutoQueue={() => setAutoQueueEnabled(prev => !prev)}
