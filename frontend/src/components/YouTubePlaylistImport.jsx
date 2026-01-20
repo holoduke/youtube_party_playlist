@@ -263,8 +263,8 @@ export default function YouTubePlaylistImport({ onImportComplete, onClose, curre
                 <div className="text-white/60 text-sm mb-2">
                   {playlistVideos.length} videos will be imported
                 </div>
-                <div className="max-h-48 overflow-y-auto space-y-1 pr-2">
-                  {playlistVideos.slice(0, 10).map((video, index) => (
+                <div className="max-h-32 overflow-y-auto space-y-1 pr-2">
+                  {playlistVideos.slice(0, 5).map((video, index) => (
                     <div key={video.youtube_id} className="flex items-center gap-2 text-sm text-white/70">
                       <span className="text-white/40 w-5 text-right">{index + 1}.</span>
                       {video.thumbnail_url && (
@@ -273,15 +273,15 @@ export default function YouTubePlaylistImport({ onImportComplete, onClose, curre
                       <span className="truncate flex-1">{video.title}</span>
                     </div>
                   ))}
-                  {playlistVideos.length > 10 && (
+                  {playlistVideos.length > 5 && (
                     <div className="text-white/50 text-sm pl-7">
-                      ...and {playlistVideos.length - 10} more videos
+                      ...and {playlistVideos.length - 5} more videos
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2 border-t border-white/10">
                 <button
                   onClick={onClose}
                   className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-medium transition-colors"

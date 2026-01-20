@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import YouTube from 'react-youtube';
-import { getBroadcastState } from '../services/api';
+import { getChannelState } from '../services/api';
 
 export default function BroadcastViewer() {
   const { hash } = useParams();
@@ -78,18 +78,18 @@ export default function BroadcastViewer() {
     isMutedRef.current = isMuted;
   }, [isMuted]);
 
-  // Poll for broadcast state
+  // Poll for channel broadcast state
   useEffect(() => {
     const pollState = async () => {
       try {
-        const data = await getBroadcastState(hash);
+        const data = await getChannelState(hash);
 
         if (!data.is_broadcasting) {
           setIsEnded(true);
           return;
         }
 
-        setPlaylistName(data.name);
+        setPlaylistName(data.playlist_name || 'Live Broadcast');
         setIdleImageUrl(data.idle_image_url || null);
         setLoading(false);
 

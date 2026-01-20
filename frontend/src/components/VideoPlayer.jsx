@@ -1,7 +1,7 @@
 import YouTube from 'react-youtube';
 import { useRef, useEffect, useState, useImperativeHandle, forwardRef, memo, useMemo, useCallback } from 'react';
 
-const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, onStateUpdate, autoStart = true, onAddToPlaylist, isInPlaylist, onVideoDrop, showDropOverlay }, ref) => {
+const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, onStateUpdate, onError, autoStart = true, onAddToPlaylist, isInPlaylist, onVideoDrop, showDropOverlay }, ref) => {
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -251,6 +251,12 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     }
   }, [playerNumber, currentTime, duration, onStateUpdate, onEnded, startTimeTracking, stopTimeTracking]);
 
+  const handleError = useCallback((event) => {
+    setIsPlaying(false);
+    stopTimeTracking();
+    onError?.(playerNumber, event?.data, video);
+  }, [onError, playerNumber, stopTimeTracking, video]);
+
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -321,6 +327,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
               opts={opts}
               onReady={onReady}
               onStateChange={onStateChange}
+              onError={handleError}
               className="w-full h-full"
               iframeClassName="w-full h-full absolute inset-0"
             />

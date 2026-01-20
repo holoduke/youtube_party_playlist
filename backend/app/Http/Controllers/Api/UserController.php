@@ -41,6 +41,7 @@ class UserController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'default_playlist_id' => $user->default_playlist_id,
             ]
         ], 201);
     }
@@ -65,7 +66,23 @@ class UserController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'default_playlist_id' => $user->default_playlist_id,
             ]
+        ]);
+    }
+
+    // POST /api/users/{user}/default-playlist - Set default playlist
+    public function setDefaultPlaylist(Request $request, User $user)
+    {
+        $validated = $request->validate([
+            'playlist_id' => 'nullable|exists:playlists,id',
+        ]);
+
+        $user->update(['default_playlist_id' => $validated['playlist_id']]);
+
+        return response()->json([
+            'success' => true,
+            'default_playlist_id' => $user->default_playlist_id,
         ]);
     }
 

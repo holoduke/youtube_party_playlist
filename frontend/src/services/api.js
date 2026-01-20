@@ -43,6 +43,13 @@ export const deleteUser = async (id) => {
   return response.data;
 };
 
+export const setDefaultPlaylist = async (userId, playlistId) => {
+  const response = await api.post(`/users/${userId}/default-playlist`, {
+    playlist_id: playlistId,
+  });
+  return response.data;
+};
+
 // ==================== Category API ====================
 
 export const getCategories = async () => {
@@ -212,33 +219,73 @@ export const likeVideoInPlaylist = async (shareCode, videoId) => {
   return response.data;
 };
 
-// ==================== Broadcast API ====================
+// ==================== Channel/Broadcast API ====================
 
-// Start broadcasting a playlist
+// Get or create channel for user
+export const getChannel = async (userId) => {
+  const response = await api.get(`/channel/${userId}`);
+  return response.data;
+};
+
+// Start broadcasting on user's channel
+export const startChannelBroadcast = async (userId, playlistId = null) => {
+  const response = await api.post(`/channel/${userId}/start-broadcast`, {
+    playlist_id: playlistId,
+  });
+  return response.data;
+};
+
+// Stop broadcasting on user's channel
+export const stopChannelBroadcast = async (userId) => {
+  const response = await api.post(`/channel/${userId}/stop-broadcast`);
+  return response.data;
+};
+
+// Sync channel broadcast state (DJ app calls this)
+export const syncChannelState = async (userId, state) => {
+  const response = await api.post(`/channel/${userId}/sync`, state);
+  return response.data;
+};
+
+// Get channel state for viewers (polling)
+export const getChannelState = async (hash) => {
+  const response = await api.get(`/channel/watch/${hash}`);
+  return response.data;
+};
+
+// Lookup channel by 4-digit code
+export const getChannelByCode = async (code) => {
+  const response = await api.get(`/channel/code/${code}`);
+  return response.data;
+};
+
+// Get all live channels
+export const getLiveChannels = async () => {
+  const response = await api.get('/channels/live');
+  return response.data;
+};
+
+// Legacy broadcast API (keeping for backwards compatibility)
 export const startBroadcast = async (playlistId) => {
   const response = await api.post(`/playlists/${playlistId}/start-broadcast`);
   return response.data;
 };
 
-// Stop broadcasting a playlist
 export const stopBroadcast = async (playlistId) => {
   const response = await api.post(`/playlists/${playlistId}/stop-broadcast`);
   return response.data;
 };
 
-// Sync broadcast state (DJ app calls this)
 export const syncBroadcastState = async (playlistId, state) => {
   const response = await api.post(`/playlists/${playlistId}/broadcast-sync`, state);
   return response.data;
 };
 
-// Get broadcast state (viewer polls this)
 export const getBroadcastState = async (hash) => {
   const response = await api.get(`/broadcast/${hash}`);
   return response.data;
 };
 
-// Lookup broadcast by 4-digit code
 export const getBroadcastByCode = async (code) => {
   const response = await api.get(`/broadcast/code/${code}`);
   return response.data;

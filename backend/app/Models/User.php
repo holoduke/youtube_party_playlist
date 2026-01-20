@@ -23,6 +23,7 @@ class User extends Authenticatable
         'password',
         'google_id',
         'avatar',
+        'default_playlist_id',
     ];
 
     /**
@@ -54,6 +55,14 @@ class User extends Authenticatable
     public function playlists()
     {
         return $this->hasMany(Playlist::class);
+    }
+
+    /**
+     * Get the user's default playlist.
+     */
+    public function defaultPlaylist()
+    {
+        return $this->belongsTo(Playlist::class, 'default_playlist_id');
     }
 
     /**

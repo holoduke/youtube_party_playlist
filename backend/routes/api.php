@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\VideoController;
 use App\Http\Controllers\Api\YouTubeController;
 use App\Http\Controllers\Api\GoogleAuthController;
 use App\Http\Controllers\Api\YouTubePlaylistController;
+use App\Http\Controllers\Api\ChannelController;
 use Illuminate\Support\Facades\Route;
 
 // Authentication
@@ -18,6 +19,7 @@ Route::post('/login', [UserController::class, 'login']);
 Route::get('/users', [UserController::class, 'index']);
 Route::get('/users/{user}', [UserController::class, 'show']);
 Route::delete('/users/{user}', [UserController::class, 'destroy']);
+Route::post('/users/{user}/default-playlist', [UserController::class, 'setDefaultPlaylist']);
 
 // Categories and Videos
 Route::apiResource('categories', CategoryController::class)->only(['index', 'show']);
@@ -72,3 +74,12 @@ Route::get('/auth/google/status', [GoogleAuthController::class, 'status']);
 Route::get('/youtube/my-playlists', [YouTubePlaylistController::class, 'myPlaylists']);
 Route::get('/youtube/playlist-items', [YouTubePlaylistController::class, 'playlistItems']);
 Route::post('/youtube/import-playlist', [YouTubePlaylistController::class, 'importPlaylist']);
+
+// Channel-based broadcasting (user has one channel)
+Route::get('/channel/{userId}', [ChannelController::class, 'show']);
+Route::post('/channel/{userId}/start-broadcast', [ChannelController::class, 'startBroadcast']);
+Route::post('/channel/{userId}/stop-broadcast', [ChannelController::class, 'stopBroadcast']);
+Route::post('/channel/{userId}/sync', [ChannelController::class, 'sync']);
+Route::get('/channel/watch/{hash}', [ChannelController::class, 'watch']);
+Route::get('/channel/code/{code}', [ChannelController::class, 'getByCode']);
+Route::get('/channels/live', [ChannelController::class, 'liveIndex']);

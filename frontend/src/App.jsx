@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, createPlaylist, updatePlaylist, deletePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, startBroadcast, stopBroadcast, syncBroadcastState } from './services/api';
+import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, createPlaylist, updatePlaylist, deletePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, getChannel, startChannelBroadcast, stopChannelBroadcast, syncChannelState, setDefaultPlaylist } from './services/api';
 import { initEcho, broadcastState } from './services/playerSync';
 import { useUser } from './contexts/UserContext';
 import CategoryFilter from './components/CategoryFilter';
@@ -15,10 +15,22 @@ import YouTubePlaylistImport from './components/YouTubePlaylistImport';
 import AccountSettings from './components/AccountSettings';
 import PlaylistSettingsModal from './components/PlaylistSettingsModal';
 
+const YOUTUBE_ERROR_MESSAGES = {
+  2: 'Invalid video ID or request.',
+  5: 'HTML5 playback error.',
+  100: 'Video not found or removed.',
+  101: 'Playback disabled by the owner.',
+  150: 'Playback disabled by the owner.',
+};
+
+const getYouTubeErrorMessage = (code) => (
+  YOUTUBE_ERROR_MESSAGES[code] || 'Video failed to load or play.'
+);
+
 function App() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser, logout } = useUser();
+  const { currentUser, logout, updateUser } = useUser();
   const [categories, setCategories] = useState([]);
   const [videos, setVideos] = useState([]);
   const [playlists, setPlaylists] = useState([]);
@@ -68,6 +80,9 @@ function App() {
   const [partyDropdownOpen, setPartyDropdownOpen] = useState(false);
   const [partyLiveResult, setPartyLiveResult] = useState(null);
   const [partyLoading, setPartyLoading] = useState(false);
+
+  // Channel state (user's broadcast channel)
+  const [channel, setChannel] = useState(null);
 
   // Broadcast state
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
@@ -125,6 +140,7 @@ function App() {
   const player2Ref = useRef(null);
   const [player1State, setPlayer1State] = useState({ playing: false, currentTime: 0, duration: 0 });
   const [player2State, setPlayer2State] = useState({ playing: false, currentTime: 0, duration: 0 });
+  const [playerErrors, setPlayerErrors] = useState({ player1: null, player2: null });
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
   const [autoQueueEnabled, setAutoQueueEnabled] = useState(true); // Auto-load next video after fade
   // Track which videos were restored (should not auto-start)
@@ -150,6 +166,14 @@ function App() {
       document.removeEventListener('drop', handleDrop);
     };
   }, []);
+
+  useEffect(() => {
+    setPlayerErrors(prev => ({ ...prev, player1: null }));
+  }, [player1Video?.youtube_id]);
+
+  useEffect(() => {
+    setPlayerErrors(prev => ({ ...prev, player2: null }));
+  }, [player2Video?.youtube_id]);
 
   // Clipboard state - only show button when valid YouTube URL is in clipboard
   const [clipboardYoutubeUrl, setClipboardYoutubeUrl] = useState(null);
@@ -329,12 +353,30 @@ function App() {
     }
   }, [currentUser]);
 
-  // Reload playlists when user changes
+  // Reload playlists and channel when user changes
   useEffect(() => {
     if (currentUser) {
-      loadPlaylists();
+      loadPlaylists().then(() => {
+        // Auto-select default playlist if set and no playlist currently selected
+        if (currentUser.default_playlist_id && !selectedPlaylist) {
+          getPlaylist(currentUser.default_playlist_id)
+            .then(playlist => setSelectedPlaylist(playlist))
+            .catch(() => {}); // Ignore if default playlist was deleted
+        }
+      });
+      // Load user's channel
+      getChannel(currentUser.id).then(data => {
+        setChannel(data.channel);
+        // Restore broadcast state if channel is broadcasting
+        if (data.channel?.is_broadcasting) {
+          setIsBroadcasting(true);
+          setBroadcastHash(data.channel.hash);
+          setBroadcastCode(data.channel.broadcast_code);
+        }
+      }).catch(err => console.error('Failed to load channel:', err));
     } else {
       setPlaylists([]);
+      setChannel(null);
     }
   }, [currentUser, loadPlaylists]);
 
@@ -367,7 +409,7 @@ function App() {
 
   // Sync broadcast state when broadcasting (debounced)
   useEffect(() => {
-    if (!isBroadcasting || !selectedPlaylist) return;
+    if (!isBroadcasting || !currentUser) return;
 
     // Clear any pending sync
     if (broadcastSyncTimeoutRef.current) {
@@ -378,7 +420,8 @@ function App() {
     broadcastSyncTimeoutRef.current = setTimeout(async () => {
       // Send position-based video assignments and individual player states
       try {
-        await syncBroadcastState(selectedPlaylist.id, {
+        await syncChannelState(currentUser.id, {
+          playlist_id: selectedPlaylist?.id,
           player1_video: player1Video,
           player2_video: player2Video,
           player1_playing: player1State.playing,
@@ -401,7 +444,7 @@ function App() {
         clearTimeout(broadcastSyncTimeoutRef.current);
       }
     };
-  }, [isBroadcasting, selectedPlaylist, player1Video, player2Video, crossfadeValue, player1State.playing, player2State.playing, player1State.currentTime, player2State.currentTime, isStopped]);
+  }, [isBroadcasting, currentUser, selectedPlaylist, player1Video, player2Video, crossfadeValue, player1State.playing, player2State.playing, player1State.currentTime, player2State.currentTime, isStopped]);
 
   useEffect(() => {
     if (viewMode === 'categories') {
@@ -690,8 +733,8 @@ function App() {
     setCrossfadeValue(50);
 
     // Stop broadcasting if active
-    if (isBroadcasting && selectedPlaylist) {
-      stopBroadcast(selectedPlaylist.id).catch(() => {});
+    if (isBroadcasting && currentUser) {
+      stopChannelBroadcast(currentUser.id).catch(() => {});
     }
     setIsBroadcasting(false);
     setBroadcastHash(null);
@@ -717,8 +760,8 @@ function App() {
       setSelectedPlaylist(playlist);
       setViewingPlaylist(playlist);
 
-      // Restore broadcasting state if playlist is broadcasting
-      if (playlist.is_broadcasting) {
+      // Restore legacy playlist broadcast state only if channel is not live
+      if (!channel?.is_broadcasting && playlist.is_broadcasting) {
         setIsBroadcasting(true);
         setBroadcastHash(playlist.hash);
         setBroadcastCode(playlist.broadcast_code);
@@ -766,7 +809,7 @@ function App() {
             }, 1500);
           }
         }
-      } else {
+      } else if (!channel?.is_broadcasting) {
         setIsBroadcasting(false);
         setBroadcastHash(null);
         setBroadcastCode(null);
@@ -782,7 +825,7 @@ function App() {
     } catch (error) {
       console.error('Failed to load playlist:', error);
     }
-  }, [setViewMode]);
+  }, [setViewMode, channel?.is_broadcasting]);
 
   // Restore saved playlist and playback state after playlists are loaded
   useEffect(() => {
@@ -874,6 +917,18 @@ function App() {
   const displayVideos = viewMode === 'playlist' && viewingPlaylist
     ? viewingPlaylist.videos || []
     : videos;
+
+  const handlePlayerError = useCallback((playerNumber, errorCode, video) => {
+    setPlayerErrors(prev => ({
+      ...prev,
+      [`player${playerNumber}`]: {
+        code: errorCode,
+        message: getYouTubeErrorMessage(errorCode),
+        videoTitle: video?.title || 'Unknown video',
+        videoId: video?.youtube_id || null,
+      },
+    }));
+  }, []);
 
   // Handler for player state updates
   const handlePlayerStateUpdate = useCallback((playerNumber, state) => {
@@ -1055,8 +1110,9 @@ function App() {
     };
 
     // Immediately sync fade trigger to server so viewers can start animating right away
-    if (isBroadcasting && selectedPlaylist) {
-      syncBroadcastState(selectedPlaylist.id, {
+    if (isBroadcasting && currentUser) {
+      syncChannelState(currentUser.id, {
+        playlist_id: selectedPlaylist?.id,
         player1_video: player1Video,
         player2_video: player2Video,
         player1_playing: player1State.playing,
@@ -1200,8 +1256,9 @@ function App() {
       };
 
       // Immediately sync fade trigger to server so viewers can start animating right away
-      if (isBroadcasting && selectedPlaylist) {
-        syncBroadcastState(selectedPlaylist.id, {
+      if (isBroadcasting && currentUser) {
+        syncChannelState(currentUser.id, {
+          playlist_id: selectedPlaylist?.id,
           player1_video: player1Video,
           player2_video: player2Video,
           player1_playing: player1State.playing,
@@ -1621,7 +1678,7 @@ function App() {
         broadcastCode={broadcastCode}
         onStopBroadcast={async () => {
           try {
-            await stopBroadcast(selectedPlaylist.id);
+            await stopChannelBroadcast(currentUser.id);
             setIsBroadcasting(false);
             setBroadcastHash(null);
             setBroadcastCode(null);
@@ -1743,7 +1800,14 @@ function App() {
                           </svg>
                         </div>
                         <div className="flex-1 text-left min-w-0">
-                          <p className="text-white font-medium text-sm truncate">{playlist.name}</p>
+                          <p className="text-white font-medium text-sm truncate flex items-center gap-1">
+                            {playlist.name}
+                            {currentUser?.default_playlist_id === playlist.id && (
+                              <svg className="w-3.5 h-3.5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                              </svg>
+                            )}
+                          </p>
                           <div className="flex items-center gap-2">
                             <span className="text-purple-300/60 text-xs">{playlist.videos_count || 0} videos</span>
                             {playlist.is_public && (
@@ -1780,7 +1844,32 @@ function App() {
                                 }}
                               />
                               {/* Dropdown menu */}
-                              <div className="absolute right-0 top-full mt-1 z-50 bg-gray-900 border border-white/20 rounded-lg shadow-xl py-1 min-w-[120px]">
+                              <div className="absolute right-0 top-full mt-1 z-50 bg-gray-900 border border-white/20 rounded-lg shadow-xl py-1 min-w-[140px]">
+                                {/* Make Default */}
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    setPlaylistMenuOpen(null);
+                                    try {
+                                      await setDefaultPlaylist(currentUser.id, playlist.id);
+                                      updateUser({ default_playlist_id: playlist.id });
+                                      showNotification(`"${playlist.name}" set as default`);
+                                    } catch {
+                                      showNotification('Failed to set default', 'error');
+                                    }
+                                  }}
+                                  className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${
+                                    currentUser?.default_playlist_id === playlist.id
+                                      ? 'text-green-400 bg-green-500/10'
+                                      : 'text-white/70 hover:bg-white/10'
+                                  }`}
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                  </svg>
+                                  {currentUser?.default_playlist_id === playlist.id ? 'Default' : 'Make Default'}
+                                </button>
+                                {/* Delete */}
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1945,9 +2034,9 @@ function App() {
                 <YouTubePlaylistImport
                   currentPlaylist={selectedPlaylist}
                   onImportComplete={async (playlist, importedCount) => {
-                    // Refresh playlists list
-                    loadPlaylists();
-                    // Reload the full playlist with videos
+                    // Refresh playlists list first
+                    await loadPlaylists();
+                    // Reload the full playlist with videos and select it
                     const updated = await getPlaylist(playlist.id);
                     setSelectedPlaylist(updated);
                     setShowPlaylistModal(false);
@@ -2002,6 +2091,79 @@ function App() {
           {/* Left Column - Players (sticky on desktop) */}
           <div className="lg:col-span-4">
             <div className="lg:sticky lg:top-20 flex flex-col gap-3">
+              {/* Channel Section */}
+              {currentUser && (
+                <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all overflow-hidden ${isBroadcasting ? 'border-green-500/50' : 'border-white/10'}`}>
+                  <div className="p-3 flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isBroadcasting ? 'bg-green-500/20' : 'bg-white/10'}`}>
+                      {/* Radio tower icon */}
+                      <svg className={`w-5 h-5 ${isBroadcasting ? 'text-green-400' : 'text-purple-300/60'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
+                        <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
+                        <circle cx="12" cy="12" r="2" />
+                        <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
+                        <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium text-sm ${isBroadcasting ? 'text-green-400' : 'text-white'}`}>
+                        {isBroadcasting ? 'On Air' : 'Your Channel'}
+                      </p>
+                      {isBroadcasting && broadcastCode && (
+                        <p className="text-green-300/60 text-xs">Code: {broadcastCode}</p>
+                      )}
+                      {!isBroadcasting && (
+                        <p className="text-purple-300/60 text-xs">Start broadcasting to viewers</p>
+                      )}
+                    </div>
+                    {isBroadcasting ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowBroadcastModal(true)}
+                          className="px-3 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await stopChannelBroadcast(currentUser.id);
+                              setIsBroadcasting(false);
+                              setBroadcastHash(null);
+                              setBroadcastCode(null);
+                              showNotification('Broadcast stopped');
+                            } catch (error) {
+                              showNotification('Failed to stop broadcast', 'error');
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          Stop
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const result = await startChannelBroadcast(currentUser.id, selectedPlaylist?.id);
+                            setIsBroadcasting(true);
+                            setBroadcastHash(result.channel.hash);
+                            setBroadcastCode(result.channel.broadcast_code);
+                            setChannel(result.channel);
+                            setShowBroadcastModal(true);
+                          } catch (error) {
+                            showNotification('Failed to start broadcast', 'error');
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        Go Live
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Combined Playlist & Playback Controls */}
               <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} overflow-hidden`}>
                 {/* Playlist Header */}
@@ -2090,43 +2252,6 @@ function App() {
                     </button>
                   )}
 
-                  {/* Broadcast Button */}
-                  {selectedPlaylist && (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (isBroadcasting) {
-                          setShowBroadcastModal(true);
-                        } else {
-                          try {
-                            const result = await startBroadcast(selectedPlaylist.id);
-                            setIsBroadcasting(true);
-                            setBroadcastHash(result.hash);
-                            setBroadcastCode(result.broadcast_code);
-                            setShowBroadcastModal(true);
-                          } catch (error) {
-                            console.error('Failed to start broadcast:', error);
-                            showNotification('Failed to start broadcast', 'error');
-                          }
-                        }
-                      }}
-                      className={`p-2 rounded-lg transition-all flex-shrink-0 ${
-                        isBroadcasting
-                          ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30 animate-pulse'
-                          : 'bg-white/10 text-purple-300/60 hover:bg-white/20 hover:text-white'
-                      }`}
-                      title={isBroadcasting ? 'Broadcasting (click to view)' : 'Start Broadcast'}
-                    >
-                      {/* Radio tower icon */}
-                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
-                        <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
-                        <circle cx="12" cy="12" r="2" />
-                        <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
-                        <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
-                      </svg>
-                    </button>
-                  )}
                 </div>
 
                 {/* Playback Controls */}
@@ -2296,6 +2421,7 @@ function App() {
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={handlePlaylistVideoEnded}
                     onStateUpdate={handlePlayerStateUpdate}
+                    onError={handlePlayerError}
                     autoStart={player1Video?.youtube_id !== restoredVideoIds.player1}
                     onAddToPlaylist={selectedPlaylist ? (videoId) => handleAddToPlaylist(videoId, selectedPlaylist.id) : null}
                     isInPlaylist={selectedPlaylist?.videos?.some(v => v.id === player1Video?.id)}
@@ -2318,6 +2444,7 @@ function App() {
                     onTimeUpdate={handleTimeUpdate}
                     onEnded={handlePlaylistVideoEnded}
                     onStateUpdate={handlePlayerStateUpdate}
+                    onError={handlePlayerError}
                     autoStart={player2Video?.youtube_id !== restoredVideoIds.player2}
                     onAddToPlaylist={selectedPlaylist ? (videoId) => handleAddToPlaylist(videoId, selectedPlaylist.id) : null}
                     onVideoDrop={handlePlayVideo}
@@ -2373,6 +2500,41 @@ function App() {
                   </div>
                 )}
               </div>
+
+              {(playerErrors.player1 || playerErrors.player2) && (
+                <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+                  <div className="text-[10px] uppercase tracking-wide text-red-300/70">
+                    Player Errors
+                  </div>
+                  {playerErrors.player1 && (
+                    <div className="mt-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-red-300">P1</span>
+                        <span className="text-red-100/90">{playerErrors.player1.message}</span>
+                        {playerErrors.player1.code && (
+                          <span className="text-red-300/60">({playerErrors.player1.code})</span>
+                        )}
+                      </div>
+                      <div className="text-red-200/60 truncate">{playerErrors.player1.videoTitle}</div>
+                    </div>
+                  )}
+                  {playerErrors.player2 && (
+                    <div className="mt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-red-300">P2</span>
+                        <span className="text-red-100/90">{playerErrors.player2.message}</span>
+                        {playerErrors.player2.code && (
+                          <span className="text-red-300/60">({playerErrors.player2.code})</span>
+                        )}
+                      </div>
+                      <div className="text-red-200/60 truncate">{playerErrors.player2.videoTitle}</div>
+                    </div>
+                  )}
+                  <div className="mt-2 text-[10px] text-red-200/60">
+                    If you are on a VPN, YouTube may block playback.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
