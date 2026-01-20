@@ -191,11 +191,11 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                   </div>
                 )}
                 {isActive && !isPending && (
-                  <div className="absolute inset-0 flex items-end justify-around px-1 pb-1 bg-black/40">
-                    {[0, 120, 240, 60, 180, 300, 90, 210].map((delay, i) => (
+                  <div className="absolute inset-0 flex items-end justify-center gap-1 px-3 pb-1 bg-black/40">
+                    {[0, 150, 80, 220, 40].map((delay, i) => (
                       <span
                         key={i}
-                        className="w-1 bg-green-400 rounded-t animate-equalizer"
+                        className="w-2 bg-green-400 rounded-t animate-equalizer"
                         style={{ animationDelay: `${delay}ms` }}
                       />
                     ))}
