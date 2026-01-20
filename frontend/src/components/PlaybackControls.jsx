@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 export default function PlaybackControls({
   activeVideo,
   activePlayer,
@@ -14,6 +16,7 @@ export default function PlaybackControls({
   onToggleAutoQueue,
   nextVideo,
 }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const canControl = activeVideo || hasPlaylistVideos;
 
   // Format duration for display (handles minutes and hours)
@@ -111,6 +114,116 @@ export default function PlaybackControls({
     </div>
   );
 
+  // Control button component (reusable for both views)
+  const ControlButton = ({ onClick, disabled, active, gradient, title, children, size = 'normal' }) => {
+    const sizeClasses = size === 'small' ? 'w-8 h-8' : 'w-10 h-10';
+    const iconSize = size === 'small' ? 'w-5 h-5' : 'w-6 h-6';
+
+    let colorClasses;
+    if (disabled) {
+      colorClasses = 'bg-white/5 text-white/30 cursor-not-allowed';
+    } else if (gradient) {
+      colorClasses = 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400';
+    } else if (active) {
+      colorClasses = 'bg-purple-500 text-white';
+    } else {
+      colorClasses = 'bg-white/10 text-white/60 hover:bg-white/20';
+    }
+
+    return (
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className={`${sizeClasses} flex items-center justify-center rounded-lg transition-colors ${colorClasses}`}
+        title={title}
+      >
+        <div className={iconSize}>{children}</div>
+      </button>
+    );
+  };
+
+  // Collapsed view
+  if (isCollapsed) {
+    return (
+      <div className="p-2">
+        <div className="flex items-center gap-2">
+          {/* Current song mini info */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <PlayIcon active={activePlayerState.playing && !isStopped} />
+            {activeVideo ? (
+              <div className="relative w-10 h-7 rounded overflow-hidden bg-black/50 flex-shrink-0">
+                <img
+                  src={activeVideo.thumbnail_url}
+                  alt={activeVideo.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-10 h-7 rounded bg-white/10 flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-xs font-medium truncate">
+                {activeVideo?.title || 'No video'}
+              </p>
+              <p className="text-purple-300/50 text-[10px] font-mono">
+                {activePlayerState.duration > 0
+                  ? `${formatTime(activePlayerState.currentTime)} / ${formatTime(activePlayerState.duration)}`
+                  : '--:--'
+                }
+              </p>
+            </div>
+          </div>
+
+          {/* Compact controls */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <ControlButton
+              onClick={onPlayPause}
+              disabled={!canControl}
+              active={activePlayerState.playing}
+              title={activePlayerState.playing ? 'Pause' : 'Play'}
+              size="small"
+            >
+              {activePlayerState.playing ? (
+                <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="5" width="4" height="14" rx="1" />
+                  <rect x="14" y="5" width="4" height="14" rx="1" />
+                </svg>
+              ) : (
+                <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </ControlButton>
+
+            <ControlButton
+              onClick={onSkipToNext}
+              disabled={isAutoFading || !hasVideoToFadeTo}
+              gradient={!isAutoFading && hasVideoToFadeTo}
+              title="Fade to next"
+              size="small"
+            >
+              <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M5 5v14l7-7zM12 5v14l7-7z" />
+              </svg>
+            </ControlButton>
+
+            {/* Expand button */}
+            <button
+              onClick={() => setIsCollapsed(false)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 transition-colors"
+              title="Expand"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Expanded view (original)
   return (
     <div className="p-3">
       {/* Current & Next Songs */}
@@ -168,8 +281,8 @@ export default function PlaybackControls({
           className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
             canControl
               ? isStopped
-                ? 'bg-red-500/50 text-red-200'
-                : 'bg-white/10 text-white/60 hover:bg-red-500/30 hover:text-red-300'
+                ? 'bg-white/10 text-white/60 hover:bg-white/20'
+                : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
               : 'bg-white/5 text-white/30 cursor-not-allowed'
           }`}
           title="Stop (show idle screen)"
@@ -212,6 +325,20 @@ export default function PlaybackControls({
             <path d="M12 23l2-2.5-2.5-.5" fill="currentColor" />
             <path d="M3.5 12A8.5 8.5 0 0 1 12 3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             <path d="M12 1l-2 2.5 2.5.5" fill="currentColor" />
+          </svg>
+        </button>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Collapse button */}
+        <button
+          onClick={() => setIsCollapsed(true)}
+          className="w-10 h-10 flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 transition-colors"
+          title="Collapse"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>
         </button>
       </div>

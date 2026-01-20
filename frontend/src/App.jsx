@@ -152,6 +152,7 @@ function App() {
   const [player1State, setPlayer1State] = useState({ playing: false, currentTime: 0, duration: 0 });
   const [player2State, setPlayer2State] = useState({ playing: false, currentTime: 0, duration: 0 });
   const [playerErrors, setPlayerErrors] = useState({ player1: null, player2: null });
+  const errorSkipTimeoutRef = useRef(null); // Timeout for auto-skip after error
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
   const seekHoldRef = useRef(null);
@@ -1121,15 +1122,26 @@ function App() {
     : videos;
 
   const handlePlayerError = useCallback((playerNumber, errorCode, video) => {
+    const errorMessage = getYouTubeErrorMessage(errorCode);
+    const videoTitle = video?.title || 'Unknown video';
+
     setPlayerErrors(prev => ({
       ...prev,
       [`player${playerNumber}`]: {
         code: errorCode,
-        message: getYouTubeErrorMessage(errorCode),
-        videoTitle: video?.title || 'Unknown video',
+        message: errorMessage,
+        videoTitle: videoTitle,
         videoId: video?.youtube_id || null,
+        timestamp: Date.now(), // Track when error occurred for auto-skip
       },
     }));
+
+    // Show notification (auto-dismiss after 5 seconds for errors)
+    setNotification({
+      message: `${videoTitle}: ${errorMessage}`,
+      type: 'error',
+    });
+    setTimeout(() => setNotification(null), 5000);
   }, []);
 
   // Handler for player state updates
@@ -1420,6 +1432,36 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [isAutoFading, skipToNextWithFade]);
+
+  // Auto-skip to next video after playback error (2 second delay)
+  useEffect(() => {
+    const activeError = crossfadeValue < 50 ? playerErrors.player1 : playerErrors.player2;
+
+    if (activeError && !errorSkipTimeoutRef.current) {
+      // Check if there's a video to fade to
+      const hasNextVideo = crossfadeValue < 50 ? !!player2Video : !!player1Video;
+
+      if (hasNextVideo && !isAutoFading) {
+        console.log(`[Error Recovery] Will skip to next video in 2 seconds`);
+        errorSkipTimeoutRef.current = setTimeout(() => {
+          errorSkipTimeoutRef.current = null;
+          // Clear the error for the affected player
+          setPlayerErrors(prev => ({
+            ...prev,
+            [crossfadeValue < 50 ? 'player1' : 'player2']: null,
+          }));
+          skipToNextWithFade();
+        }, 2000);
+      }
+    }
+
+    return () => {
+      if (errorSkipTimeoutRef.current) {
+        clearTimeout(errorSkipTimeoutRef.current);
+        errorSkipTimeoutRef.current = null;
+      }
+    };
+  }, [playerErrors, crossfadeValue, player1Video, player2Video, isAutoFading, skipToNextWithFade]);
 
   // Save playback state to localStorage when it changes
   useEffect(() => {
