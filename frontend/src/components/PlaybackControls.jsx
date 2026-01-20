@@ -280,8 +280,8 @@ export default function PlaybackControls({
           disabled={!canControl}
           className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
             canControl
-              ? isStopped
-                ? 'bg-white/10 text-white/60 hover:bg-white/20'
+              ? !isStopped && activePlayerState.playing
+                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400'
                 : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
               : 'bg-white/5 text-white/30 cursor-not-allowed'
           }`}
