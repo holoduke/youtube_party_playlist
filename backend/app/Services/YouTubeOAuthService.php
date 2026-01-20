@@ -122,8 +122,10 @@ class YouTubeOAuthService
         $youtube = new YouTube($client);
 
         $videos = [];
+        $videoIds = [];
         $pageToken = null;
 
+        // First, get all playlist items
         do {
             $response = $youtube->playlistItems->listPlaylistItems('snippet,contentDetails', [
                 'playlistId' => $playlistId,
@@ -142,20 +144,57 @@ class YouTubeOAuthService
                 }
 
                 $thumbnails = $snippet->getThumbnails();
+                $videoId = $contentDetails->getVideoId();
 
-                $videos[] = [
-                    'youtube_id' => $contentDetails->getVideoId(),
+                $videos[$videoId] = [
+                    'youtube_id' => $videoId,
                     'title' => $snippet->getTitle(),
                     'thumbnail_url' => $thumbnails?->getMedium()?->getUrl()
                         ?? $thumbnails?->getDefault()?->getUrl(),
                     'channel' => $snippet->getVideoOwnerChannelTitle(),
                     'position' => $snippet->getPosition(),
+                    'duration' => 0, // Will be filled in next step
                 ];
+                $videoIds[] = $videoId;
             }
 
             $pageToken = $response->getNextPageToken();
         } while ($pageToken);
 
-        return $videos;
+        // Now fetch video details (including duration) in batches of 50
+        $chunks = array_chunk($videoIds, 50);
+        foreach ($chunks as $chunk) {
+            $videoResponse = $youtube->videos->listVideos('contentDetails', [
+                'id' => implode(',', $chunk),
+            ]);
+
+            foreach ($videoResponse->getItems() as $videoItem) {
+                $videoId = $videoItem->getId();
+                $duration = $this->parseDuration($videoItem->getContentDetails()->getDuration());
+                if (isset($videos[$videoId])) {
+                    $videos[$videoId]['duration'] = $duration;
+                }
+            }
+        }
+
+        // Return as indexed array sorted by position
+        $result = array_values($videos);
+        usort($result, fn($a, $b) => $a['position'] <=> $b['position']);
+
+        return $result;
+    }
+
+    /**
+     * Parse ISO 8601 duration to seconds.
+     */
+    protected function parseDuration(string $duration): int
+    {
+        preg_match('/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/', $duration, $matches);
+
+        $hours = (int) ($matches[1] ?? 0);
+        $minutes = (int) ($matches[2] ?? 0);
+        $seconds = (int) ($matches[3] ?? 0);
+
+        return $hours * 3600 + $minutes * 60 + $seconds;
     }
 }

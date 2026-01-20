@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { updatePlaylist, uploadPlaylistIdleImage, deletePlaylistIdleImage, IDLE_IMAGE_PRESETS, getPresetImageUrl } from '../services/api';
 
 export default function PlaylistSettingsModal({
@@ -12,6 +13,7 @@ export default function PlaylistSettingsModal({
   const [customImagePreview, setCustomImagePreview] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [togglingPublic, setTogglingPublic] = useState(false);
   const fileInputRef = useRef(null);
 
   if (!isOpen || !playlist) return null;
@@ -20,6 +22,29 @@ export default function PlaylistSettingsModal({
   const currentIdlePath = playlist.idle_image_path;
   const isPreset = currentIdlePath?.startsWith('presets/');
   const currentPresetId = isPreset ? currentIdlePath.replace('presets/', '').replace('.png', '') : null;
+
+  const shareUrl = playlist.hash ? `${window.location.origin}/watch?pl=${playlist.hash}` : null;
+
+  const handleTogglePublic = async () => {
+    setTogglingPublic(true);
+    try {
+      await updatePlaylist(playlist.id, { is_public: !playlist.is_public });
+      onPlaylistUpdated();
+      showNotification?.(playlist.is_public ? 'Playlist is now private' : 'Playlist is now public');
+    } catch (error) {
+      console.error('Failed to update playlist visibility:', error);
+      showNotification?.('Failed to update visibility', 'error');
+    } finally {
+      setTogglingPublic(false);
+    }
+  };
+
+  const handleCopyShareUrl = () => {
+    if (shareUrl) {
+      navigator.clipboard.writeText(shareUrl);
+      showNotification?.('Share URL copied!');
+    }
+  };
 
   const handlePresetSelect = async (presetId) => {
     setSaving(true);
@@ -108,6 +133,70 @@ export default function PlaylistSettingsModal({
 
         <h2 className="text-xl font-bold text-white mb-1">Playlist Settings</h2>
         <p className="text-purple-300/70 text-sm mb-6">{playlist.name}</p>
+
+        {/* Visibility Section */}
+        <div className="mb-6 p-4 bg-white/5 rounded-xl border border-white/10">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-white font-medium">Public Playlist</h3>
+              <p className="text-purple-300/60 text-sm">
+                {playlist.is_public ? 'Anyone with the link can view' : 'Only you can see this playlist'}
+              </p>
+            </div>
+            <button
+              onClick={handleTogglePublic}
+              disabled={togglingPublic}
+              className={`relative w-12 h-6 rounded-full transition-colors ${
+                playlist.is_public ? 'bg-green-500' : 'bg-white/20'
+              } ${togglingPublic ? 'opacity-50' : ''}`}
+            >
+              <div
+                className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                  playlist.is_public ? 'translate-x-7' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Share Section - only when public */}
+          {playlist.is_public && shareUrl && (
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <h4 className="text-white/80 text-sm font-medium mb-3">Share</h4>
+
+              {/* QR Code */}
+              <div className="flex gap-4">
+                <div className="bg-white p-2 rounded-lg">
+                  <QRCodeSVG
+                    value={shareUrl}
+                    size={80}
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  {/* Share URL */}
+                  <div className="bg-black/30 rounded-lg p-2 mb-2">
+                    <p className="text-white/90 font-mono text-xs break-all select-all">
+                      {shareUrl}
+                    </p>
+                  </div>
+
+                  {/* Copy Button */}
+                  <button
+                    onClick={handleCopyShareUrl}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy URL
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Idle Screen Section */}
         <div className="space-y-4">

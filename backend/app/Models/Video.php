@@ -10,6 +10,7 @@ class Video extends Model
         'title',
         'youtube_id',
         'thumbnail_url',
+        'channel',
         'duration',
         'start_time',
         'end_time',

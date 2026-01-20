@@ -84,11 +84,24 @@ class YouTubeController extends Controller
             'youtube_id' => 'required|string',
             'title' => 'required|string',
             'thumbnail_url' => 'required|string',
+            'channel' => 'nullable|string',
+            'duration' => 'nullable|integer',
         ]);
 
         // Check if already exists
         $existing = Video::where('youtube_id', $request->youtube_id)->first();
         if ($existing) {
+            // Update metadata if it was missing
+            $updates = [];
+            if (empty($existing->channel) && $request->channel) {
+                $updates['channel'] = $request->channel;
+            }
+            if (empty($existing->duration) && $request->duration) {
+                $updates['duration'] = $request->duration;
+            }
+            if (!empty($updates)) {
+                $existing->update($updates);
+            }
             return response()->json($existing->load('categories'));
         }
 
@@ -97,6 +110,8 @@ class YouTubeController extends Controller
             'youtube_id' => $request->youtube_id,
             'title' => $request->title,
             'thumbnail_url' => $request->thumbnail_url,
+            'channel' => $request->channel,
+            'duration' => $request->duration,
         ]);
 
         return response()->json($video->load('categories'), 201);

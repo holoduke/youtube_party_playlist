@@ -60,6 +60,10 @@ export default function BroadcastViewer() {
   const player2InitializedRef = useRef(false);
   // Track when fades end to prevent video loads immediately after
   const lastFadeEndTimeRef = useRef(0);
+  // Track last seek time per player to add cooldown between seeks
+  const lastSeekTimeRef = useRef({ 1: 0, 2: 0 });
+  // Track ended state for polling closure
+  const isEndedRef = useRef(false);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -78,6 +82,59 @@ export default function BroadcastViewer() {
     isMutedRef.current = isMuted;
   }, [isMuted]);
 
+  useEffect(() => {
+    isEndedRef.current = isEnded;
+  }, [isEnded]);
+
+  // Handle visibility changes - try to keep playback going when hidden, resume when visible
+  useEffect(() => {
+    let keepAliveInterval = null;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Tab going hidden - set up interval to keep trying to play
+        // This fights against browser throttling
+        if (!keepAliveInterval) {
+          keepAliveInterval = setInterval(() => {
+            const player1FadedOut = crossfadeRef.current >= 95;
+            const player2FadedOut = crossfadeRef.current <= 5;
+
+            if (player1PlayingRef.current && !player1FadedOut && player1Ref.current) {
+              try { player1Ref.current.playVideo(); } catch (e) {}
+            }
+            if (player2PlayingRef.current && !player2FadedOut && player2Ref.current) {
+              try { player2Ref.current.playVideo(); } catch (e) {}
+            }
+          }, 1000);
+        }
+      } else {
+        // Tab visible again - clear interval and immediately resume
+        if (keepAliveInterval) {
+          clearInterval(keepAliveInterval);
+          keepAliveInterval = null;
+        }
+
+        if (!isMutedRef.current) {
+          const player1FadedOut = crossfadeRef.current >= 95;
+          const player2FadedOut = crossfadeRef.current <= 5;
+
+          if (player1PlayingRef.current && !player1FadedOut && player1Ref.current) {
+            try { player1Ref.current.playVideo(); } catch (e) {}
+          }
+          if (player2PlayingRef.current && !player2FadedOut && player2Ref.current) {
+            try { player2Ref.current.playVideo(); } catch (e) {}
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (keepAliveInterval) clearInterval(keepAliveInterval);
+    };
+  }, []);
+
   // Poll for channel broadcast state
   useEffect(() => {
     const pollState = async () => {
@@ -86,7 +143,27 @@ export default function BroadcastViewer() {
 
         if (!data.is_broadcasting) {
           setIsEnded(true);
+          // Continue polling to detect when broadcast comes back online
           return;
+        }
+
+        // Broadcast is live - if we were showing "ended", reset and reconnect
+        if (isEndedRef.current) {
+          console.log('Broadcast came back online, reconnecting...');
+          setIsEnded(false);
+          setLoading(true);
+          // Reset video state to re-sync from scratch
+          setPlayer1Video(null);
+          setPlayer2Video(null);
+          setInitialPlayer1VideoId(null);
+          setInitialPlayer2VideoId(null);
+          player1SeenVideoIdRef.current = null;
+          player2SeenVideoIdRef.current = null;
+          player1LoadedVideoIdRef.current = null;
+          player2LoadedVideoIdRef.current = null;
+          player1InitializedRef.current = false;
+          player2InitializedRef.current = false;
+          setHasReceivedState(false);
         }
 
         setPlaylistName(data.playlist_name || 'Live Broadcast');
@@ -203,15 +280,22 @@ export default function BroadcastViewer() {
         } catch (e) {}
 
         // Sync playback time (use higher threshold to avoid constant seeking)
-        const SYNC_THRESHOLD = 10;
+        const SYNC_THRESHOLD = 20;
+        const SEEK_COOLDOWN_MS = 10000; // Don't seek more than once per 10 seconds
 
         // Helper to safely call player methods (iframe may be destroyed)
         const safeSeek = (playerRef, time) => {
           const playerNum = playerRef === player1Ref ? 1 : 2;
+          const now = Date.now();
+          // Check cooldown
+          if (now - lastSeekTimeRef.current[playerNum] < SEEK_COOLDOWN_MS) {
+            return;
+          }
           try {
             if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
               console.log(`[YT API] Time sync: Player ${playerNum}.seekTo(${time.toFixed(1)})`);
               playerRef.current.seekTo(time, true);
+              lastSeekTimeRef.current[playerNum] = now;
             }
           } catch (e) {
             // Player iframe was destroyed, ignore
@@ -743,6 +827,12 @@ export default function BroadcastViewer() {
     safePlayerCall(player2Ref, 'unMute');
     safePlayerCall(player2Ref, 'setVolume', vol2);
     player2LastVolumeRef.current = vol2;
+
+    // IMPORTANT: Start BOTH players in this single user gesture
+    // This gives both players "user-initiated" privilege so they continue in background
+    // Volume/crossfade will control which one is actually heard
+    safePlayerCall(player1Ref, 'playVideo');
+    safePlayerCall(player2Ref, 'playVideo');
   };
 
   // Handle fullscreen toggle

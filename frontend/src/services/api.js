@@ -308,6 +308,8 @@ export const importYouTubeVideo = async (video) => {
     youtube_id: video.youtube_id,
     title: video.title,
     thumbnail_url: video.thumbnail_url,
+    channel: video.channel,
+    duration: video.duration,
   });
   return response.data;
 };

@@ -123,6 +123,11 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
         playerRef.current.pauseVideo();
       }
     },
+    seekTo: (time, allowSeekAhead = true) => {
+      if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+        playerRef.current.seekTo(time, allowSeekAhead);
+      }
+    },
     destroy: () => {
       console.log(`[Player ${playerNumber}] destroy() called`);
       stopTimeTracking();
@@ -300,7 +305,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
               )}
             </svg>
             <p className="text-white font-semibold text-lg">
-              {isDragOver ? 'Release to load' : `Drop on Player ${playerNumber}`}
+              {isDragOver ? 'Release to queue' : 'Queue to playlist'}
             </p>
           </div>
         </div>

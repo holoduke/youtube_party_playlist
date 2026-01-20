@@ -109,8 +109,24 @@ class YouTubePlaylistController extends Controller
                     [
                         'title' => $ytVideo['title'],
                         'thumbnail_url' => $ytVideo['thumbnail_url'],
+                        'channel' => $ytVideo['channel'] ?? null,
+                        'duration' => $ytVideo['duration'] ?? null,
                     ]
                 );
+
+                // Update existing video with metadata if it was missing
+                if ($video->wasRecentlyCreated === false) {
+                    $updates = [];
+                    if (empty($video->channel) && !empty($ytVideo['channel'])) {
+                        $updates['channel'] = $ytVideo['channel'];
+                    }
+                    if (empty($video->duration) && !empty($ytVideo['duration'])) {
+                        $updates['duration'] = $ytVideo['duration'];
+                    }
+                    if (!empty($updates)) {
+                        $video->update($updates);
+                    }
+                }
 
                 // Skip if video already in playlist
                 if ($playlist->videos()->where('video_id', $video->id)->exists()) {

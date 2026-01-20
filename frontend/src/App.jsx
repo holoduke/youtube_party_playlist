@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getCategories, getVideos, getPlaylists, getPublicPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, createPlaylist, updatePlaylist, deletePlaylist, goLivePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, getChannel, startChannelBroadcast, stopChannelBroadcast, syncChannelState, setDefaultPlaylist } from './services/api';
+import { getCategories, getVideos, getPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, updatePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, getChannel, startChannelBroadcast, stopChannelBroadcast, syncChannelState } from './services/api';
 import { initEcho, broadcastState } from './services/playerSync';
 import { useUser } from './contexts/UserContext';
 import CategoryFilter from './components/CategoryFilter';
@@ -11,9 +10,15 @@ import VideoPlayer from './components/VideoPlayer';
 import Crossfader from './components/Crossfader';
 import UserSelector from './components/UserSelector';
 import BroadcastModal from './components/BroadcastModal';
-import YouTubePlaylistImport from './components/YouTubePlaylistImport';
 import AccountSettings from './components/AccountSettings';
 import PlaylistSettingsModal from './components/PlaylistSettingsModal';
+import PartyModal from './components/PartyModal';
+import PublishModal from './components/PublishModal';
+import PlaylistModal from './components/PlaylistModal';
+import AddVideoModal from './components/AddVideoModal';
+import ChannelSection from './components/ChannelSection';
+import PlaybackControls from './components/PlaybackControls';
+import YouTubeSearchBar from './components/YouTubeSearchBar';
 
 const YOUTUBE_ERROR_MESSAGES = {
   2: 'Invalid video ID or request.',
@@ -125,7 +130,6 @@ function App() {
 
   // Add video modal state
   const [addVideoModal, setAddVideoModal] = useState(null); // null or video object
-  const [showPlaylistSubmenu, setShowPlaylistSubmenu] = useState(false);
 
   // Playlist item menu state
   const [playlistMenuOpen, setPlaylistMenuOpen] = useState(null); // playlist id or null
@@ -141,6 +145,11 @@ function App() {
   const [player1State, setPlayer1State] = useState({ playing: false, currentTime: 0, duration: 0 });
   const [player2State, setPlayer2State] = useState({ playing: false, currentTime: 0, duration: 0 });
   const [playerErrors, setPlayerErrors] = useState({ player1: null, player2: null });
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [seekValue, setSeekValue] = useState(0);
+  const seekHoldRef = useRef(null);
+  const wasPlayingOnHideRef = useRef({ player1: false, player2: false });
+  const hiddenKeepAliveRef = useRef(null);
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
   const [autoQueueEnabled, setAutoQueueEnabled] = useState(true); // Auto-load next video after fade
   // Track which videos were restored (should not auto-start)
@@ -166,6 +175,48 @@ function App() {
       document.removeEventListener('drop', handleDrop);
     };
   }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        wasPlayingOnHideRef.current = {
+          player1: player1State.playing,
+          player2: player2State.playing,
+        };
+        if (!hiddenKeepAliveRef.current && !isStopped) {
+          hiddenKeepAliveRef.current = setInterval(() => {
+            if (wasPlayingOnHideRef.current.player1 && player1Ref.current) {
+              player1Ref.current.play();
+            }
+            if (wasPlayingOnHideRef.current.player2 && player2Ref.current) {
+              player2Ref.current.play();
+            }
+          }, 3000);
+        }
+        return;
+      }
+      if (hiddenKeepAliveRef.current) {
+        clearInterval(hiddenKeepAliveRef.current);
+        hiddenKeepAliveRef.current = null;
+      }
+      if (isStopped) return;
+      if (wasPlayingOnHideRef.current.player1 && player1Ref.current) {
+        player1Ref.current.play();
+      }
+      if (wasPlayingOnHideRef.current.player2 && player2Ref.current) {
+        player2Ref.current.play();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (hiddenKeepAliveRef.current) {
+        clearInterval(hiddenKeepAliveRef.current);
+        hiddenKeepAliveRef.current = null;
+      }
+    };
+  }, [player1State.playing, player2State.playing, isStopped]);
 
   useEffect(() => {
     setPlayerErrors(prev => ({ ...prev, player1: null }));
@@ -590,6 +641,83 @@ function App() {
       setPlayer1Video(video);
     } else {
       setPlayer2Video(video);
+    }
+  };
+
+  // Queue a video to the playlist and fade to it
+  const handleQueueToPlaylist = async (video, playerNumber) => {
+    // Must have a selected playlist to queue to
+    if (!selectedPlaylist) {
+      showNotification('Select a playlist first', 'error');
+      return;
+    }
+
+    const playlistVideos = selectedPlaylist.videos || [];
+    const isAlreadyInPlaylist = playlistVideos.some(v => v.id === video.id);
+
+    // Determine active player and currently playing video
+    const activePlayerNumber = crossfadeValue < 50 ? 1 : 2;
+    const inactivePlayer = activePlayerNumber === 1 ? 2 : 1;
+    const activeVideo = activePlayerNumber === 1 ? player1Video : player2Video;
+
+    // Find the index of the currently playing video in the playlist
+    const currentIndex = activeVideo ? playlistVideos.findIndex(v => v.id === activeVideo.id) : -1;
+
+    try {
+      if (!isAlreadyInPlaylist) {
+        // Add video to playlist first
+        await addVideoToPlaylist(selectedPlaylist.id, video.id);
+
+        // Refresh playlist to get updated video list
+        const updated = await getPlaylist(selectedPlaylist.id);
+        const updatedVideos = updated.videos || [];
+
+        // Reorder: move the newly added video to be right after the current video
+        if (currentIndex >= 0 && updatedVideos.length > 1) {
+          const newVideoIndex = updatedVideos.findIndex(v => v.id === video.id);
+          if (newVideoIndex >= 0 && newVideoIndex !== currentIndex + 1) {
+            const videoIds = updatedVideos.map(v => v.id);
+            const [movedId] = videoIds.splice(newVideoIndex, 1);
+            const insertAt = Math.min(currentIndex + 1, videoIds.length);
+            videoIds.splice(insertAt, 0, movedId);
+            await reorderPlaylistVideos(selectedPlaylist.id, videoIds);
+          }
+        }
+
+        // Refresh to get final order
+        const finalPlaylist = await getPlaylist(selectedPlaylist.id);
+        setSelectedPlaylist(finalPlaylist);
+        if (viewingPlaylist?.id === selectedPlaylist.id) {
+          setViewingPlaylist(finalPlaylist);
+        }
+        loadPlaylists();
+      }
+
+      // Load video into the inactive player and fade to it
+      console.log(`[Queue] Loading "${video.title}" into Player ${inactivePlayer} and fading`);
+      if (inactivePlayer === 1) {
+        setPlayer1Video(video);
+        setRestoredVideoIds(prev => ({ ...prev, player1: null })); // null = autoplay
+      } else {
+        setPlayer2Video(video);
+        setRestoredVideoIds(prev => ({ ...prev, player2: null })); // null = autoplay
+      }
+
+      // Enable playlist mode if not already active
+      if (!playlistMode) {
+        setActivePlaylist(selectedPlaylist);
+        setPlaylistMode(true);
+        setAutoPlayEnabled(true);
+      }
+
+      // Fade to the new video after a short delay to let it load
+      setTimeout(() => {
+        skipToNextWithFade();
+      }, 500);
+
+    } catch (error) {
+      console.error('Failed to queue video:', error);
+      showNotification('Failed to queue video', 'error');
     }
   };
 
@@ -1062,6 +1190,7 @@ function App() {
   const [isAutoFading, setIsAutoFading] = useState(false);
   const autoFadeIntervalRef = useRef(null);
   const loadNextVideoTimeoutRef = useRef(null);
+  const fadeQueueRef = useRef(0); // Queue of pending fade requests
   // Fade trigger data for broadcast viewers - they animate locally based on this
   const fadeTriggeredRef = useRef(null);
 
@@ -1070,8 +1199,10 @@ function App() {
 
   // Manual crossfade between the two players
   const skipToNextWithFade = useCallback(() => {
-    // Don't start if already fading
+    // If already fading, queue this request
     if (isAutoFading) {
+      fadeQueueRef.current++;
+      console.log(`[Crossfade] Queued fade request (queue size: ${fadeQueueRef.current})`);
       return;
     }
 
@@ -1191,6 +1322,19 @@ function App() {
       }
     }, 200);
   }, [isAutoFading, crossfadeValue, autoQueueEnabled, autoPlayVideos, player1Video, player2Video]);
+
+  // Process fade queue when a fade completes
+  useEffect(() => {
+    if (!isAutoFading && fadeQueueRef.current > 0) {
+      console.log(`[Crossfade] Processing queued fade (${fadeQueueRef.current} remaining)`);
+      fadeQueueRef.current--;
+      // Small delay to let state settle before starting next fade
+      const timer = setTimeout(() => {
+        skipToNextWithFade();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isAutoFading, skipToNextWithFade]);
 
   // Save playback state to localStorage when it changes
   useEffect(() => {
@@ -1339,12 +1483,63 @@ function App() {
   const activePlayer = crossfadeValue < 50 ? 1 : 2;
   const activeVideo = activePlayer === 1 ? player1Video : player2Video;
   const activePlayerState = activePlayer === 1 ? player1State : player2State;
+  const seekMax = activePlayerState.duration || 0;
+  const seekDisplayTime = (() => {
+    if (isSeeking) return seekValue;
+    const hold = seekHoldRef.current;
+    if (hold && Date.now() < hold.until) return hold.time;
+    return activePlayerState.currentTime;
+  })();
+
+  useEffect(() => {
+    if (isSeeking) return;
+    const hold = seekHoldRef.current;
+    if (hold && Date.now() < hold.until) return;
+    setSeekValue(activePlayerState.currentTime || 0);
+  }, [activePlayerState.currentTime, activePlayerState.duration, activePlayer, isSeeking]);
+
+  const handleSeekCommit = useCallback((time) => {
+    const playerRef = activePlayer === 1 ? player1Ref : player2Ref;
+    const max = activePlayerState.duration || 0;
+    if (!playerRef.current || !max) return;
+    const clamped = Math.max(0, Math.min(time, max));
+    playerRef.current.seekTo?.(clamped, true);
+    setSeekValue(clamped);
+    return clamped;
+  }, [activePlayer, activePlayerState.duration]);
+
+  const commitSeek = useCallback(() => {
+    if (!isSeeking) return;
+    const committed = handleSeekCommit(seekValue);
+    setIsSeeking(false);
+    if (typeof committed === 'number') {
+      seekHoldRef.current = { time: committed, until: Date.now() + 800 };
+    }
+  }, [handleSeekCommit, isSeeking, seekValue]);
 
   // Next video is the one after the currently active video in the playlist
   const activeVideoIndex = autoPlayVideos.findIndex(v => v.id === activeVideo?.id);
   const nextVideo = activeVideoIndex >= 0 && activeVideoIndex + 1 < autoPlayVideos.length
     ? autoPlayVideos[activeVideoIndex + 1]
     : null;
+
+  // Calculate remaining playlist time and count
+  const playlistRemainingInfo = (() => {
+    if (activeVideoIndex < 0 || autoPlayVideos.length === 0) {
+      return { time: 0, count: 0 };
+    }
+    // Remaining videos after the current one
+    const remainingVideos = autoPlayVideos.slice(activeVideoIndex + 1);
+    const remainingCount = remainingVideos.length;
+    // Sum durations of remaining videos
+    const remainingDuration = remainingVideos.reduce((sum, v) => sum + (v.duration || 0), 0);
+    // Add remaining time in current song
+    const currentRemaining = Math.max(0, (activePlayerState.duration || 0) - (activePlayerState.currentTime || 0));
+    return {
+      time: Math.round(remainingDuration + currentRemaining),
+      count: remainingCount
+    };
+  })();
 
   return (
     <div className="min-h-screen">
@@ -1368,306 +1563,30 @@ function App() {
       )}
 
       {/* Party Mode Modal */}
-      {showPartyModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={closePartyModal}
-          />
-
-          {/* Modal */}
-          <div className="relative bg-gradient-to-br from-purple-900/90 to-pink-900/90 backdrop-blur-xl rounded-3xl border border-purple-500/30 p-8 max-w-md w-full mx-4 shadow-2xl">
-            {/* Close button */}
-            <button
-              onClick={closePartyModal}
-              className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            {/* Content - Step 1: Select Playlist */}
-            {!partyLiveResult ? (
-              <div>
-                <div className="text-center mb-6">
-                  <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                    Start Live Session
-                  </h2>
-                  <p className="text-purple-200/70 text-sm mt-1">
-                    Select a playlist to share with others
-                  </p>
-                </div>
-
-                {/* Playlist Selector */}
-                <div className="relative mb-6">
-                  <label className="block text-purple-300 text-sm mb-2">Select Playlist</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={partySelectedPlaylist ? partySelectedPlaylist.name : partyPlaylistSearch}
-                      onChange={(e) => {
-                        setPartyPlaylistSearch(e.target.value);
-                        setPartySelectedPlaylist(null);
-                        setPartyDropdownOpen(true);
-                      }}
-                      onFocus={() => setPartyDropdownOpen(true)}
-                      placeholder="Search playlists..."
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-purple-300/50 focus:outline-none focus:border-purple-500 transition-colors"
-                    />
-                    <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-purple-300/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-
-                  {/* Dropdown */}
-                  {partyDropdownOpen && filteredPartyPlaylists.length > 0 && (
-                    <div className="absolute z-10 w-full mt-2 bg-purple-900/95 border border-purple-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                      {filteredPartyPlaylists.map((playlist) => (
-                        <button
-                          key={playlist.id}
-                          onClick={() => {
-                            setPartySelectedPlaylist(playlist);
-                            setPartyPlaylistSearch('');
-                            setPartyDropdownOpen(false);
-                          }}
-                          className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors flex items-center gap-3"
-                        >
-                          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <p className="text-white font-medium">{playlist.name}</p>
-                            <p className="text-purple-300/60 text-xs">{playlist.videos_count || 0} videos</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {partyDropdownOpen && filteredPartyPlaylists.length === 0 && (
-                    <div className="absolute z-10 w-full mt-2 bg-purple-900/95 border border-purple-500/30 rounded-xl shadow-xl p-4 text-center text-purple-300/60">
-                      No playlists found
-                    </div>
-                  )}
-                </div>
-
-                {/* Selected Playlist Preview */}
-                {partySelectedPlaylist && (
-                  <div className="mb-6 p-4 bg-white/5 border border-purple-500/20 rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-white font-semibold">{partySelectedPlaylist.name}</p>
-                        <p className="text-purple-300/60 text-sm">{partySelectedPlaylist.videos_count || 0} videos ready to play</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Go Live Button */}
-                <button
-                  onClick={handlePartyGoLive}
-                  disabled={!partySelectedPlaylist || partyLoading}
-                  className={`w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
-                    partySelectedPlaylist && !partyLoading
-                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white shadow-lg shadow-green-500/30'
-                      : 'bg-white/10 text-white/40 cursor-not-allowed'
-                  }`}
-                >
-                  {partyLoading ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Starting...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" />
-                      </svg>
-                      Go Live
-                    </>
-                  )}
-                </button>
-              </div>
-            ) : (
-              /* Content - Step 2: Live Session Created */
-              <div className="text-center">
-                <div className="mb-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <h2 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-                    You're Live!
-                  </h2>
-                  <p className="text-purple-200/70 text-sm mt-1">
-                    Share this code with your friends
-                  </p>
-                </div>
-
-                {/* Share Code Display */}
-                <div className="bg-black/30 rounded-xl p-4 mb-4">
-                  <p className="text-purple-300/60 text-xs mb-2 uppercase tracking-wide">Share Code</p>
-                  <p className="text-4xl font-mono font-bold text-white tracking-[0.3em]">
-                    {partyLiveResult.share_code}
-                  </p>
-                </div>
-
-                {/* QR Code */}
-                <div className="bg-white p-4 rounded-2xl inline-block mb-4">
-                  <QRCodeSVG
-                    value={getLiveUrl(partyLiveResult.share_code)}
-                    size={180}
-                    level="H"
-                    includeMargin={false}
-                  />
-                </div>
-
-                {/* URL Display */}
-                <div className="bg-black/30 rounded-xl p-3 mb-4">
-                  <p className="text-purple-300/60 text-xs mb-1 uppercase tracking-wide">Or share this URL</p>
-                  <p className="text-white font-mono text-sm break-all select-all">
-                    {getLiveUrl(partyLiveResult.share_code)}
-                  </p>
-                </div>
-
-                {/* Action buttons */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(getLiveUrl(partyLiveResult.share_code));
-                      showNotification('URL copied to clipboard!');
-                    }}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    Copy
-                  </button>
-                  <button
-                    onClick={handleOpenAsHost}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white rounded-xl transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Start Playing
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <PartyModal
+        isOpen={showPartyModal}
+        onClose={() => setShowPartyModal(false)}
+        playlists={playlists}
+        showNotification={showNotification}
+        onOpenAsHost={(liveResult) => {
+          navigate(`/live/${liveResult.share_code}?host=${liveResult.host_code}`);
+        }}
+      />
 
       {/* Publish Modal with QR Code */}
-      {showPublishModal && selectedPlaylist && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setShowPublishModal(false)}
-          />
-
-          {/* Modal */}
-          <div className="relative bg-gradient-to-br from-purple-900/90 to-pink-900/90 backdrop-blur-xl rounded-3xl border border-purple-500/30 p-8 max-w-md w-full mx-4 shadow-2xl">
-            {/* Close button */}
-            <button
-              onClick={() => setShowPublishModal(false)}
-              className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            <div className="text-center">
-              <div className="mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-                  Playlist Published!
-                </h2>
-                <p className="text-purple-200/70 text-sm mt-1">
-                  "{selectedPlaylist.name}" is now public
-                </p>
-              </div>
-
-              {/* QR Code */}
-              <div className="bg-white p-4 rounded-2xl inline-block mb-4">
-                <QRCodeSVG
-                  value={`${window.location.origin}/watch?pl=${selectedPlaylist.hash}`}
-                  size={180}
-                  level="H"
-                  includeMargin={false}
-                />
-              </div>
-
-              {/* URL Display */}
-              <div className="bg-black/30 rounded-xl p-3 mb-4">
-                <p className="text-purple-300/60 text-xs mb-1 uppercase tracking-wide">Share this URL</p>
-                <p className="text-white font-mono text-sm break-all select-all">
-                  {`${window.location.origin}/watch?pl=${selectedPlaylist.hash}`}
-                </p>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/watch?pl=${selectedPlaylist.hash}`);
-                    showNotification('URL copied to clipboard!');
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Copy URL
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      await updatePlaylist(selectedPlaylist.id, { is_public: false });
-                      const updated = await getPlaylist(selectedPlaylist.id);
-                      setSelectedPlaylist(updated);
-                      if (viewingPlaylist?.id === selectedPlaylist.id) {
-                        setViewingPlaylist(updated);
-                      }
-                      loadPlaylists();
-                      setShowPublishModal(false);
-                      showNotification('Playlist unpublished');
-                    } catch (error) {
-                      console.error('Failed to unpublish:', error);
-                      showNotification('Failed to unpublish', 'error');
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  Unpublish
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <PublishModal
+        isOpen={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+        playlist={selectedPlaylist}
+        onPlaylistUpdated={(updated) => {
+          setSelectedPlaylist(updated);
+          if (viewingPlaylist?.id === selectedPlaylist.id) {
+            setViewingPlaylist(updated);
+          }
+        }}
+        showNotification={showNotification}
+        loadPlaylists={loadPlaylists}
+      />
 
       {/* Broadcast Modal */}
       <BroadcastModal
@@ -1707,348 +1626,33 @@ function App() {
       />
 
       {/* Playlist Selection Modal */}
-      {showPlaylistModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setShowPlaylistModal(false)}
-          />
-
-          {/* Modal */}
-          <div className="relative bg-gradient-to-br from-purple-900/90 to-pink-900/90 backdrop-blur-xl rounded-3xl border border-purple-500/30 p-6 max-w-md w-full mx-4 shadow-2xl max-h-[80vh] flex flex-col">
-            {/* Close button */}
-            <button
-              onClick={() => setShowPlaylistModal(false)}
-              className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            {/* Header */}
-            <div className="text-center mb-4">
-              <h2 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Select Playlist
-              </h2>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex gap-1 p-1 bg-white/10 rounded-xl mb-4">
-              <button
-                onClick={() => handlePlaylistModalTabChange('my')}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                  playlistModalTab === 'my'
-                    ? 'bg-purple-500 text-white'
-                    : 'text-purple-300 hover:text-white'
-                }`}
-              >
-                My Playlists
-              </button>
-              <button
-                onClick={() => handlePlaylistModalTabChange('public')}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                  playlistModalTab === 'public'
-                    ? 'bg-purple-500 text-white'
-                    : 'text-purple-300 hover:text-white'
-                }`}
-              >
-                Public
-              </button>
-              <button
-                onClick={() => handlePlaylistModalTabChange('create')}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                  playlistModalTab === 'create'
-                    ? 'bg-purple-500 text-white'
-                    : 'text-purple-300 hover:text-white'
-                }`}
-              >
-                Create
-              </button>
-              <button
-                onClick={() => handlePlaylistModalTabChange('import')}
-                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                  playlistModalTab === 'import'
-                    ? 'bg-purple-500 text-white'
-                    : 'text-purple-300 hover:text-white'
-                }`}
-              >
-                Import
-              </button>
-            </div>
-
-            {/* Tab Content */}
-            <div className="flex-1 overflow-y-auto">
-              {/* My Playlists Tab */}
-              {playlistModalTab === 'my' && (
-                <div className="space-y-2">
-                  {playlists.length > 0 ? (
-                    playlists.map((playlist) => (
-                      <div
-                        key={playlist.id}
-                        className={`group w-full p-3 rounded-xl transition-colors flex items-center gap-3 cursor-pointer ${
-                          selectedPlaylist?.id === playlist.id
-                            ? 'bg-purple-500/30 border border-purple-500'
-                            : 'bg-white/5 hover:bg-white/10 border border-transparent'
-                        }`}
-                        onClick={() => handleSelectPlaylistFromModal(playlist.id)}
-                      >
-                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 text-left min-w-0">
-                          <p className="text-white font-medium text-sm truncate flex items-center gap-1">
-                            {playlist.name}
-                            {currentUser?.default_playlist_id === playlist.id && (
-                              <svg className="w-3.5 h-3.5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                              </svg>
-                            )}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <span className="text-purple-300/60 text-xs">{playlist.videos_count || 0} videos</span>
-                            {playlist.is_public && (
-                              <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded text-[10px]">Public</span>
-                            )}
-                          </div>
-                        </div>
-                        {selectedPlaylist?.id === playlist.id && (
-                          <svg className="w-5 h-5 text-purple-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                        {/* Three-dot menu */}
-                        <div className="relative">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPlaylistMenuOpen(playlistMenuOpen === playlist.id ? null : playlist.id);
-                            }}
-                            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-all"
-                          >
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                            </svg>
-                          </button>
-                          {playlistMenuOpen === playlist.id && (
-                            <>
-                              {/* Backdrop to close menu */}
-                              <div
-                                className="fixed inset-0 z-40"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPlaylistMenuOpen(null);
-                                }}
-                              />
-                              {/* Dropdown menu */}
-                              <div className="absolute right-0 top-full mt-1 z-50 bg-gray-900 border border-white/20 rounded-lg shadow-xl py-1 min-w-[140px]">
-                                {/* Make Default */}
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    setPlaylistMenuOpen(null);
-                                    try {
-                                      await setDefaultPlaylist(currentUser.id, playlist.id);
-                                      updateUser({ default_playlist_id: playlist.id });
-                                      showNotification(`"${playlist.name}" set as default`);
-                                    } catch {
-                                      showNotification('Failed to set default', 'error');
-                                    }
-                                  }}
-                                  className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${
-                                    currentUser?.default_playlist_id === playlist.id
-                                      ? 'text-green-400 bg-green-500/10'
-                                      : 'text-white/70 hover:bg-white/10'
-                                  }`}
-                                >
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                                  </svg>
-                                  {currentUser?.default_playlist_id === playlist.id ? 'Default' : 'Make Default'}
-                                </button>
-                                {/* Delete */}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPlaylistMenuOpen(null);
-                                    if (confirm(`Delete "${playlist.name}"? This cannot be undone.`)) {
-                                      deletePlaylist(playlist.id).then(() => {
-                                        loadPlaylists();
-                                        if (selectedPlaylist?.id === playlist.id) {
-                                          setSelectedPlaylist(null);
-                                        }
-                                        if (viewingPlaylist?.id === playlist.id) {
-                                          setViewingPlaylist(null);
-                                        }
-                                        showNotification(`Deleted "${playlist.name}"`);
-                                      }).catch(() => {
-                                        showNotification('Failed to delete playlist', 'error');
-                                      });
-                                    }
-                                  }}
-                                  className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/20 flex items-center gap-2"
-                                >
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                  Delete
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 text-purple-300/60">
-                      <p>No playlists yet</p>
-                      <button
-                        onClick={() => setPlaylistModalTab('create')}
-                        className="mt-2 text-purple-400 hover:text-purple-300 text-sm"
-                      >
-                        Create your first playlist
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Public Playlists Tab */}
-              {playlistModalTab === 'public' && (
-                <div>
-                  {/* Search */}
-                  <div className="relative mb-3">
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-300/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      type="text"
-                      value={publicPlaylistSearch}
-                      onChange={(e) => handlePublicPlaylistSearch(e.target.value)}
-                      placeholder="Search public playlists..."
-                      className="w-full pl-10 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300/50 focus:outline-none focus:border-purple-500 text-sm"
-                    />
-                  </div>
-
-                  {/* Results */}
-                  <div className="space-y-2">
-                    {publicPlaylistsLoading ? (
-                      <div className="flex items-center justify-center py-8">
-                        <div className="w-6 h-6 border-2 border-purple-300/30 border-t-purple-400 rounded-full animate-spin" />
-                      </div>
-                    ) : publicPlaylists.length > 0 ? (
-                      publicPlaylists.map((playlist) => (
-                        <button
-                          key={playlist.id}
-                          onClick={() => handleSelectPlaylistFromModal(playlist.id)}
-                          className="w-full p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent transition-colors flex items-center gap-3"
-                        >
-                          <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </div>
-                          <div className="flex-1 text-left min-w-0">
-                            <p className="text-white font-medium text-sm truncate">{playlist.name}</p>
-                            <p className="text-purple-300/60 text-xs">
-                              {playlist.videos_count || 0} videos · by {playlist.user?.name || 'Unknown'}
-                            </p>
-                          </div>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="text-center py-8 text-purple-300/60">
-                        <p>No public playlists found</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Create Playlist Tab */}
-              {playlistModalTab === 'create' && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-purple-300 text-sm mb-2">Playlist Name</label>
-                    <input
-                      type="text"
-                      value={newPlaylistName}
-                      onChange={(e) => setNewPlaylistName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleCreatePlaylist();
-                      }}
-                      placeholder="My awesome playlist..."
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-purple-300/50 focus:outline-none focus:border-purple-500 transition-colors"
-                      autoFocus
-                    />
-                  </div>
-
-                  <div>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <div
-                        onClick={() => setNewPlaylistPublic(!newPlaylistPublic)}
-                        className={`w-12 h-6 rounded-full transition-colors relative ${
-                          newPlaylistPublic ? 'bg-green-500' : 'bg-white/20'
-                        }`}
-                      >
-                        <div
-                          className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                            newPlaylistPublic ? 'translate-x-7' : 'translate-x-1'
-                          }`}
-                        />
-                      </div>
-                      <div>
-                        <p className="text-white text-sm font-medium">Public Playlist</p>
-                        <p className="text-purple-300/60 text-xs">Anyone can find and use this playlist</p>
-                      </div>
-                    </label>
-                  </div>
-
-                  <button
-                    onClick={handleCreatePlaylist}
-                    disabled={!newPlaylistName.trim() || creatingPlaylist}
-                    className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 disabled:from-purple-500/50 disabled:to-pink-500/50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2"
-                  >
-                    {creatingPlaylist ? (
-                      <>
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        Create Playlist
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* Import from YouTube Tab */}
-              {playlistModalTab === 'import' && (
-                <YouTubePlaylistImport
-                  currentPlaylist={selectedPlaylist}
-                  onImportComplete={async (playlist, importedCount) => {
-                    // Refresh playlists list first
-                    await loadPlaylists();
-                    // Reload the full playlist with videos and select it
-                    const updated = await getPlaylist(playlist.id);
-                    setSelectedPlaylist(updated);
-                    setShowPlaylistModal(false);
-                    showNotification(`Added ${importedCount || 0} videos to "${playlist.name}"`);
-                  }}
-                  onClose={() => setShowPlaylistModal(false)}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <PlaylistModal
+        isOpen={showPlaylistModal}
+        onClose={() => setShowPlaylistModal(false)}
+        playlists={playlists}
+        selectedPlaylist={selectedPlaylist}
+        viewingPlaylist={viewingPlaylist}
+        currentUser={currentUser}
+        onSelectPlaylist={handleSelectPlaylistFromModal}
+        onPlaylistCreated={(playlist) => {
+          handleSelectPlaylistFromModal(playlist.id);
+        }}
+        onPlaylistDeleted={(playlist) => {
+          if (selectedPlaylist?.id === playlist.id) {
+            setSelectedPlaylist(null);
+          }
+          if (viewingPlaylist?.id === playlist.id) {
+            setViewingPlaylist(null);
+          }
+        }}
+        onPlaylistUpdated={(updated) => {
+          setSelectedPlaylist(updated);
+          setShowPlaylistModal(false);
+        }}
+        showNotification={showNotification}
+        loadPlaylists={loadPlaylists}
+        updateUser={updateUser}
+      />
 
       <header className="sticky top-0 z-50 bg-black/30 backdrop-blur-xl border-b border-white/10">
         <div className="container mx-auto px-4 py-3">
@@ -2092,318 +1696,25 @@ function App() {
           <div className="lg:col-span-4">
             <div className="lg:sticky lg:top-20 flex flex-col gap-3">
               {/* Channel Section */}
-              {currentUser && (
-                <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all overflow-hidden ${isBroadcasting ? 'border-green-500/50' : 'border-white/10'}`}>
-                  <div className="p-3 flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isBroadcasting ? 'bg-green-500/20' : 'bg-white/10'}`}>
-                      {/* Radio tower icon */}
-                      <svg className={`w-5 h-5 ${isBroadcasting ? 'text-green-400' : 'text-purple-300/60'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
-                        <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
-                        <circle cx="12" cy="12" r="2" />
-                        <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
-                        <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`font-medium text-sm ${isBroadcasting ? 'text-green-400' : 'text-white'}`}>
-                        {isBroadcasting ? 'On Air' : 'Your Channel'}
-                      </p>
-                      {isBroadcasting && broadcastCode && (
-                        <p className="text-green-300/60 text-xs">Code: {broadcastCode}</p>
-                      )}
-                      {!isBroadcasting && (
-                        <p className="text-purple-300/60 text-xs">Start broadcasting to viewers</p>
-                      )}
-                    </div>
-                    {isBroadcasting ? (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setShowBroadcastModal(true)}
-                          className="px-3 py-1.5 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg text-sm font-medium transition-colors"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await stopChannelBroadcast(currentUser.id);
-                              setIsBroadcasting(false);
-                              setBroadcastHash(null);
-                              setBroadcastCode(null);
-                              showNotification('Broadcast stopped');
-                            } catch (error) {
-                              showNotification('Failed to stop broadcast', 'error');
-                            }
-                          }}
-                          className="px-3 py-1.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg text-sm font-medium transition-colors"
-                        >
-                          Stop
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={async () => {
-                          try {
-                            const result = await startChannelBroadcast(currentUser.id, selectedPlaylist?.id);
-                            setIsBroadcasting(true);
-                            setBroadcastHash(result.channel.hash);
-                            setBroadcastCode(result.channel.broadcast_code);
-                            setChannel(result.channel);
-                            setShowBroadcastModal(true);
-                          } catch (error) {
-                            showNotification('Failed to start broadcast', 'error');
-                          }
-                        }}
-                        className="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white rounded-lg text-sm font-medium transition-colors"
-                      >
-                        Go Live
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Combined Playlist & Playback Controls */}
-              <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} overflow-hidden`}>
-                {/* Playlist Header */}
-                <div className="p-3 flex items-center gap-3 border-b border-white/10">
-                  <div
-                    onClick={() => setShowPlaylistModal(true)}
-                    className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
-                  >
-                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 text-left min-w-0">
-                      {selectedPlaylist ? (
-                        <>
-                          <p className="text-white font-medium text-sm truncate">{selectedPlaylist.name}</p>
-                          <p className="text-purple-300/60 text-xs">{selectedPlaylist.videos?.length || 0} videos</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-white font-medium text-sm">Select Playlist</p>
-                          <p className="text-purple-300/60 text-xs">Choose or create a playlist</p>
-                        </>
-                      )}
-                    </div>
-                    <svg className="w-5 h-5 text-purple-300/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-                    </svg>
-                  </div>
-
-                  {/* Publish Button */}
-                  {selectedPlaylist && (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (selectedPlaylist.is_public) {
-                          setShowPublishModal(true);
-                        } else {
-                          try {
-                            await updatePlaylist(selectedPlaylist.id, { is_public: true });
-                            const updated = await getPlaylist(selectedPlaylist.id);
-                            setSelectedPlaylist(updated);
-                            if (viewingPlaylist?.id === selectedPlaylist.id) {
-                              setViewingPlaylist(updated);
-                            }
-                            loadPlaylists();
-                            setShowPublishModal(true);
-                          } catch (error) {
-                            console.error('Failed to publish playlist:', error);
-                            showNotification('Failed to publish playlist', 'error');
-                          }
-                        }
-                      }}
-                      className={`p-2 rounded-lg transition-all flex-shrink-0 ${
-                        selectedPlaylist.is_public
-                          ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                          : 'bg-white/10 text-purple-300/60 hover:bg-white/20 hover:text-white'
-                      }`}
-                      title={selectedPlaylist.is_public ? 'View share link' : 'Publish playlist'}
-                    >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        {selectedPlaylist.is_public ? (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        ) : (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                        )}
-                      </svg>
-                    </button>
-                  )}
-
-                  {/* Settings Button */}
-                  {selectedPlaylist && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowPlaylistSettings(true);
-                      }}
-                      className="p-2 rounded-lg bg-white/10 text-purple-300/60 hover:bg-white/20 hover:text-white transition-all flex-shrink-0"
-                      title="Playlist Settings"
-                    >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </button>
-                  )}
-
-                </div>
-
-                {/* Playback Controls */}
-                <div className="p-3">
-                  {/* Now Playing Info */}
-                  <div className="flex items-center gap-3 mb-3">
-                    {/* Thumbnail */}
-                    {activeVideo ? (
-                      <div className="relative w-14 h-9 rounded-lg overflow-hidden bg-black/50 flex-shrink-0">
-                        <img
-                          src={activeVideo.thumbnail_url}
-                          alt={activeVideo.title}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className={`absolute inset-0 border-2 rounded-lg ${activePlayer === 1 ? 'border-purple-500' : 'border-pink-500'}`} />
-                      </div>
-                    ) : (
-                      <div className="w-14 h-9 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-4 h-4 text-purple-300/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        </svg>
-                      </div>
-                    )}
-
-                    {/* Song Info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-medium truncate">
-                        {activeVideo ? activeVideo.title : 'No video loaded'}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-purple-300/60">
-                        {activePlayerState.duration > 0 ? (
-                          <>
-                            <span>{formatTime(activePlayerState.currentTime)}</span>
-                            <span>/</span>
-                            <span>{formatTime(activePlayerState.duration)}</span>
-                          </>
-                        ) : (
-                          <span>--:-- / --:--</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Control Buttons */}
-                  <div className="flex items-center gap-2">
-                    {/* Play/Pause */}
-                    <button
-                      onClick={() => {
-                        setIsStopped(false);
-                        toggleActivePlayer();
-                      }}
-                      disabled={!activeVideo && (!selectedPlaylist?.videos?.length)}
-                      className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-                        activeVideo || selectedPlaylist?.videos?.length
-                          ? activePlayerState.playing
-                            ? 'bg-purple-500 text-white'
-                            : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
-                          : 'bg-white/5 text-white/30 cursor-not-allowed'
-                      }`}
-                      title={activePlayerState.playing ? 'Pause' : 'Play'}
-                    >
-                      {activePlayerState.playing ? (
-                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                          <rect x="6" y="5" width="4" height="14" rx="1" />
-                          <rect x="14" y="5" width="4" height="14" rx="1" />
-                        </svg>
-                      ) : (
-                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                      )}
-                    </button>
-
-                    {/* Stop */}
-                    <button
-                      onClick={() => {
-                        if (player1Ref.current) player1Ref.current.pause();
-                        if (player2Ref.current) player2Ref.current.pause();
-                        setIsStopped(true);
-                      }}
-                      disabled={!activeVideo && (!selectedPlaylist?.videos?.length)}
-                      className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-                        activeVideo || selectedPlaylist?.videos?.length
-                          ? isStopped
-                            ? 'bg-red-500/50 text-red-200'
-                            : 'bg-white/10 text-white/60 hover:bg-red-500/30 hover:text-red-300'
-                          : 'bg-white/5 text-white/30 cursor-not-allowed'
-                      }`}
-                      title="Stop (show idle screen)"
-                    >
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                        <rect x="6" y="6" width="12" height="12" rx="1" />
-                      </svg>
-                    </button>
-
-                    {/* Crossfade to Next */}
-                    <button
-                      onClick={skipToNextWithFade}
-                      disabled={isAutoFading || (!player1Video && !player2Video)}
-                      className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-                        !isAutoFading && (player1Video || player2Video)
-                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-400 hover:to-pink-400'
-                          : 'bg-white/5 text-white/30 cursor-not-allowed'
-                      }`}
-                      title="Crossfade to next (8s)"
-                    >
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M5 5v14l7-7zM12 5v14l7-7z" />
-                      </svg>
-                    </button>
-
-                    {/* Auto Queue Toggle */}
-                    <button
-                      onClick={() => setAutoQueueEnabled(prev => !prev)}
-                      className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-                        autoQueueEnabled
-                          ? 'bg-green-500/30 text-green-300 hover:bg-green-500/50'
-                          : 'bg-white/10 text-white/50 hover:bg-white/20'
-                      }`}
-                      title={autoQueueEnabled ? 'Auto-queue ON' : 'Auto-queue OFF'}
-                    >
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="5" />
-                        <path d="M12 8v4l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" className={autoQueueEnabled ? 'stroke-green-900' : 'stroke-gray-900'} />
-                        <path d="M20.5 12a8.5 8.5 0 0 1-8.5 8.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        <path d="M12 23l2-2.5-2.5-.5" fill="currentColor" />
-                        <path d="M3.5 12A8.5 8.5 0 0 1 12 3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        <path d="M12 1l-2 2.5 2.5.5" fill="currentColor" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {/* Next Up */}
-                  {nextVideo && (
-                    <div className="flex items-center gap-2 pt-2 mt-2 border-t border-white/10">
-                      <span className="text-purple-300/50 text-xs">Next:</span>
-                      <div className="w-8 h-5 rounded overflow-hidden bg-black/50 flex-shrink-0">
-                        <img
-                          src={nextVideo.thumbnail_url}
-                          alt={nextVideo.title}
-                          className="w-full h-full object-cover opacity-60"
-                        />
-                      </div>
-                      <p className="text-purple-300/70 text-xs truncate flex-1">{nextVideo.title}</p>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${activePlayer === 1 ? 'bg-pink-500/20 text-pink-300/70' : 'bg-purple-500/20 text-purple-300/70'}`}>
-                        P{activePlayer === 1 ? 2 : 1}
-                      </span>
-                    </div>
-                  )}
-
-                </div>
-              </div>
+              <ChannelSection
+                currentUser={currentUser}
+                isBroadcasting={isBroadcasting}
+                broadcastCode={broadcastCode}
+                selectedPlaylist={selectedPlaylist}
+                onBroadcastStart={(result) => {
+                  setIsBroadcasting(true);
+                  setBroadcastHash(result.channel.hash);
+                  setBroadcastCode(result.channel.broadcast_code);
+                  setChannel(result.channel);
+                }}
+                onBroadcastStop={() => {
+                  setIsBroadcasting(false);
+                  setBroadcastHash(null);
+                  setBroadcastCode(null);
+                }}
+                onShowBroadcastModal={() => setShowBroadcastModal(true)}
+                showNotification={showNotification}
+              />
 
               {/* Stacked Video Players - opacity controlled by crossfade */}
               <div className="relative aspect-video rounded-xl overflow-hidden border-2 border-purple-500/50 shadow-lg shadow-purple-500/20">
@@ -2425,7 +1736,7 @@ function App() {
                     autoStart={player1Video?.youtube_id !== restoredVideoIds.player1}
                     onAddToPlaylist={selectedPlaylist ? (videoId) => handleAddToPlaylist(videoId, selectedPlaylist.id) : null}
                     isInPlaylist={selectedPlaylist?.videos?.some(v => v.id === player1Video?.id)}
-                    onVideoDrop={handlePlayVideo}
+                    onVideoDrop={handleQueueToPlaylist}
                     showDropOverlay={isGlobalDragging}
                   />
                 </div>
@@ -2447,7 +1758,7 @@ function App() {
                     onError={handlePlayerError}
                     autoStart={player2Video?.youtube_id !== restoredVideoIds.player2}
                     onAddToPlaylist={selectedPlaylist ? (videoId) => handleAddToPlaylist(videoId, selectedPlaylist.id) : null}
-                    onVideoDrop={handlePlayVideo}
+                    onVideoDrop={handleQueueToPlaylist}
                     isInPlaylist={selectedPlaylist?.videos?.some(v => v.id === player2Video?.id)}
                     showDropOverlay={isGlobalDragging}
                   />
@@ -2501,6 +1812,118 @@ function App() {
                 )}
               </div>
 
+              <div className="mt-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                <div className="flex items-center gap-3 text-xs text-purple-200/70">
+                  <span className="tabular-nums">{formatTime(seekDisplayTime)}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={seekMax || 0}
+                    step={0.1}
+                    value={Math.min(seekDisplayTime, seekMax || 0)}
+                    disabled={!seekMax}
+                    onChange={(e) => {
+                      if (!isSeeking) setIsSeeking(true);
+                      setSeekValue(Number(e.target.value));
+                    }}
+                    onPointerDown={() => setIsSeeking(true)}
+                    onPointerUp={commitSeek}
+                    onPointerCancel={commitSeek}
+                    onKeyUp={commitSeek}
+                    onBlur={() => {
+                      commitSeek();
+                    }}
+                    className="w-full h-1 rounded-lg appearance-none bg-white/20 accent-purple-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none"
+                    aria-label="Seek"
+                  />
+                  <span className="tabular-nums">{formatTime(seekMax)}</span>
+                </div>
+              </div>
+
+              {/* Combined Playlist & Playback Controls */}
+              <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} overflow-hidden`}>
+                {/* Playlist Header */}
+                <div className="p-3 flex items-center gap-3 border-b border-white/10">
+                  <div
+                    onClick={() => setShowPlaylistModal(true)}
+                    className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+                  >
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left min-w-0">
+                      {selectedPlaylist ? (
+                        <>
+                          <p className="text-white font-medium text-sm truncate">{selectedPlaylist.name}</p>
+                          <p className="text-purple-300/60 text-xs">
+                            {activeVideoIndex >= 0 ? (
+                              <span className="text-green-400">{activeVideoIndex + 1}/{selectedPlaylist.videos?.length || 0}</span>
+                            ) : (
+                              `${selectedPlaylist.videos?.length || 0} videos`
+                            )}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-white font-medium text-sm">Select Playlist</p>
+                          <p className="text-purple-300/60 text-xs">Choose or create a playlist</p>
+                        </>
+                      )}
+                    </div>
+                    <svg className="w-5 h-5 text-purple-300/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                    </svg>
+                  </div>
+
+                  {/* Settings Button */}
+                  {selectedPlaylist && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowPlaylistSettings(true);
+                      }}
+                      className="p-2 rounded-lg bg-white/10 text-purple-300/60 hover:bg-white/20 hover:text-white transition-all flex-shrink-0"
+                      title="Playlist Settings"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </button>
+                  )}
+
+                </div>
+
+                {/* Playback Controls */}
+                <PlaybackControls
+                  activeVideo={activeVideo}
+                  activePlayer={activePlayer}
+                  activePlayerState={activePlayerState}
+                  formatTime={formatTime}
+                  onPlayPause={() => {
+                    setIsStopped(false);
+                    toggleActivePlayer();
+                  }}
+                  onStop={() => {
+                    if (player1Ref.current) player1Ref.current.pause();
+                    if (player2Ref.current) player2Ref.current.pause();
+                    setIsStopped(true);
+                  }}
+                  onSkipToNext={skipToNextWithFade}
+                  isStopped={isStopped}
+                  isAutoFading={isAutoFading}
+                  hasAnyVideo={player1Video || player2Video}
+                  hasPlaylistVideos={!!selectedPlaylist?.videos?.length}
+                  autoQueueEnabled={autoQueueEnabled}
+                  onToggleAutoQueue={() => setAutoQueueEnabled(prev => !prev)}
+                  nextVideo={nextVideo}
+                  playlistRemainingTime={playlistRemainingInfo.time}
+                  playlistRemainingCount={playlistRemainingInfo.count}
+                />
+              </div>
+
               {(playerErrors.player1 || playerErrors.player2) && (
                 <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">
                   <div className="text-[10px] uppercase tracking-wide text-red-300/70">
@@ -2542,161 +1965,32 @@ function App() {
           <div className="lg:col-span-8">
             <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden">
               {/* YouTube Search with Autocomplete Dropdown */}
-              <div className="relative p-3 border-b border-white/10 bg-gradient-to-r from-red-600/10 to-pink-600/10">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400 z-10" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                    </svg>
-                    <input
-                      type="text"
-                      value={youtubeSearchQuery}
-                      onChange={(e) => handleYoutubeSearchInput(e.target.value)}
-                      onFocus={() => (youtubeSearchQuery || youtubeSearchResults.length > 0) && setShowYoutubeDropdown(true)}
-                      onBlur={() => {
-                        // Delay to allow click on dropdown items
-                        setTimeout(() => setShowYoutubeDropdown(false), 200);
-                      }}
-                      placeholder="Search YouTube or paste URL..."
-                      className="w-full pl-10 pr-10 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-red-300/50 focus:outline-none focus:border-red-500 text-sm"
-                    />
-                    {youtubeSearchLoading && (
-                      <div className="absolute right-10 top-1/2 -translate-y-1/2">
-                        <div className="w-4 h-4 border-2 border-red-300/30 border-t-red-400 rounded-full animate-spin" />
-                      </div>
-                    )}
-                    {youtubeSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={clearYoutubeSearch}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white z-10"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
+              <YouTubeSearchBar
+                searchQuery={youtubeSearchQuery}
+                onSearchInput={handleYoutubeSearchInput}
+                searchResults={youtubeSearchResults}
+                searchLoading={youtubeSearchLoading}
+                showDropdown={showYoutubeDropdown}
+                onShowDropdown={() => setShowYoutubeDropdown(true)}
+                onHideDropdown={() => setShowYoutubeDropdown(false)}
+                importingVideoId={importingVideoId}
+                onAddVideo={(video) => {
+                  handleAddYoutubeToLibrary(video, !!selectedPlaylist);
+                  setShowYoutubeDropdown(false);
+                }}
+                selectedPlaylistName={selectedPlaylist?.name}
+                clipboardYoutubeUrl={clipboardYoutubeUrl}
+                onUseClipboardUrl={() => {
+                  handleYoutubeSearchInput(clipboardYoutubeUrl);
+                  setShowYoutubeDropdown(true);
+                  setClipboardYoutubeUrl(null);
+                }}
+                onClearSearch={clearYoutubeSearch}
+              />
 
-                  {/* Autocomplete Dropdown */}
-                  {showYoutubeDropdown && youtubeSearchQuery && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-gray-900/98 backdrop-blur-xl border border-red-500/30 rounded-xl shadow-2xl shadow-black/50 max-h-[70vh] overflow-y-auto z-[100]">
-                      {youtubeSearchLoading && youtubeSearchResults.length === 0 ? (
-                        <div className="flex items-center justify-center py-8">
-                          <div className="w-6 h-6 border-2 border-red-300/30 border-t-red-400 rounded-full animate-spin" />
-                          <span className="ml-3 text-red-300/60 text-sm">Searching YouTube...</span>
-                        </div>
-                      ) : youtubeSearchResults.length === 0 ? (
-                        <div className="text-center text-red-300/60 py-8 text-sm">
-                          No results found
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-white/5">
-                          {youtubeSearchResults.map((video) => (
-                            <div
-                              key={video.youtube_id}
-                              className="flex items-center gap-3 p-3 hover:bg-white/5 transition-colors group"
-                            >
-                              {/* Thumbnail */}
-                              <div className="relative flex-shrink-0 w-24 h-14 rounded-lg overflow-hidden bg-black/50">
-                                <img
-                                  src={video.thumbnail_url}
-                                  alt={video.title}
-                                  className="w-full h-full object-cover"
-                                />
-                                {importingVideoId === video.youtube_id && (
-                                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                  </div>
-                                )}
-                                {/* YouTube badge */}
-                                <div className="absolute bottom-1 left-1 px-1 py-0.5 bg-red-600 rounded text-[10px] text-white font-medium">
-                                  YT
-                                </div>
-                              </div>
-
-                              {/* Title and duration */}
-                              <div className="flex-1 min-w-0">
-                                <h4 className="text-white text-sm font-medium line-clamp-2">{video.title}</h4>
-                                {video.duration && (
-                                  <p className="text-white/50 text-xs mt-0.5">
-                                    {typeof video.duration === 'number'
-                                      ? `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}`
-                                      : video.duration}
-                                  </p>
-                                )}
-                              </div>
-
-                              {/* Add to playlist button */}
-                              <button
-                                onClick={() => {
-                                  handleAddYoutubeToLibrary(video, !!selectedPlaylist);
-                                  setShowYoutubeDropdown(false);
-                                }}
-                                disabled={importingVideoId === video.youtube_id}
-                                className="flex-shrink-0 p-2 bg-green-600 hover:bg-green-500 disabled:bg-green-600/50 text-white rounded-lg transition-all hover:scale-110"
-                                title={selectedPlaylist ? `Add to ${selectedPlaylist.name}` : 'Add to library'}
-                              >
-                                {importingVideoId === video.youtube_id ? (
-                                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                  </svg>
-                                )}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  </div>
-
-                  {/* Paste from clipboard button - only shows when valid YouTube URL detected */}
-                  {clipboardYoutubeUrl && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleYoutubeSearchInput(clipboardYoutubeUrl);
-                        setShowYoutubeDropdown(true);
-                        setClipboardYoutubeUrl(null); // Clear after use
-                      }}
-                      className="flex items-center gap-2 px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 rounded-lg text-purple-300 hover:text-white transition-colors text-sm whitespace-nowrap"
-                      title="Add video from clipboard URL"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                      </svg>
-                      Add from clipboard
-                    </button>
-                  )}
-                </div>
-
-                {/* Click outside to close dropdown */}
-                {showYoutubeDropdown && (
-                  <div
-                    className="fixed inset-0 z-[50]"
-                    onMouseDown={() => setShowYoutubeDropdown(false)}
-                  />
-                )}
-              </div>
-
-              {/* Library / Playlist Tabs */}
+              {/* Playlist / Library Tabs */}
               <div className="border-b border-white/10">
                 <div className="flex">
-                  <button
-                    onClick={() => {
-                      setViewMode('categories');
-                      setViewingPlaylist(null);
-                    }}
-                    className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
-                      viewMode === 'categories'
-                        ? 'text-white border-b-2 border-purple-500 bg-purple-500/10'
-                        : 'text-purple-300/60 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    Library
-                  </button>
                   <div
                     onDragOver={handlePlaylistTabDragOver}
                     onDragLeave={handlePlaylistTabDragLeave}
@@ -2745,6 +2039,19 @@ function App() {
                       <span className="cursor-not-allowed">Playlist</span>
                     )}
                   </div>
+                  <button
+                    onClick={() => {
+                      setViewMode('categories');
+                      setViewingPlaylist(null);
+                    }}
+                    className={`flex-1 py-2 px-4 text-sm font-medium transition-colors ${
+                      viewMode === 'categories'
+                        ? 'text-white border-b-2 border-purple-500 bg-purple-500/10'
+                        : 'text-purple-300/60 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    Library
+                  </button>
                 </div>
 
                 {/* Category filter for Library view */}
@@ -2854,172 +2161,19 @@ function App() {
       </main>
 
       {/* Add Video Modal */}
-      {addVideoModal && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[400] flex items-center justify-center p-4"
-          onClick={() => {
-            setAddVideoModal(null);
-            setShowPlaylistSubmenu(false);
-          }}
-        >
-          <div
-            className="bg-gray-900 border border-white/20 rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Video Preview */}
-            <div className="relative aspect-video bg-gray-800">
-              {addVideoModal.thumbnail_url || addVideoModal.youtube_id ? (
-                <img
-                  src={addVideoModal.thumbnail_url || `https://img.youtube.com/vi/${addVideoModal.youtube_id}/mqdefault.jpg`}
-                  alt={addVideoModal.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900/50 to-pink-900/50">
-                  <svg className="w-16 h-16 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent" />
-              <div className="absolute bottom-3 left-3 right-3">
-                <h3 className="text-white font-medium text-sm line-clamp-2">{addVideoModal.title}</h3>
-              </div>
-              {/* Close button */}
-              <button
-                onClick={() => {
-                  setAddVideoModal(null);
-                  setShowPlaylistSubmenu(false);
-                }}
-                className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Actions */}
-            <div className="p-3 space-y-2">
-              {/* Player buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    handlePlayVideo(addVideoModal, 1);
-                    setAddVideoModal(null);
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors font-medium relative"
-                >
-                  <div className="w-6 h-6 bg-white/20 rounded flex items-center justify-center text-xs font-bold">1</div>
-                  <span>Player 1</span>
-                  {player1State.playing && (
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Playing"></span>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    handlePlayVideo(addVideoModal, 2);
-                    setAddVideoModal(null);
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-pink-600 hover:bg-pink-500 text-white rounded-xl transition-colors font-medium relative"
-                >
-                  <div className="w-6 h-6 bg-white/20 rounded flex items-center justify-center text-xs font-bold">2</div>
-                  <span>Player 2</span>
-                  {player2State.playing && (
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Playing"></span>
-                  )}
-                </button>
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-white/10 my-2" />
-
-              {/* Add to selected playlist (quick option) */}
-              {selectedPlaylist && !selectedPlaylist.videos?.some(v => v.id === addVideoModal.id) && (
-                <button
-                  onClick={() => {
-                    handleAddToPlaylist(addVideoModal.id, selectedPlaylist.id);
-                    setAddVideoModal(null);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded-xl transition-colors"
-                >
-                  <div className="w-6 h-6 bg-green-600 rounded flex items-center justify-center">
-                    <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </div>
-                  <span className="truncate">Add to {selectedPlaylist.name}</span>
-                </button>
-              )}
-
-              {/* Remove from playlist (when viewing playlist and video is in it) */}
-              {viewMode === 'playlist' && viewingPlaylist && viewingPlaylist.videos?.some(v => v.id === addVideoModal.id) && (
-                <button
-                  onClick={() => {
-                    handleRemoveFromPlaylist(addVideoModal.id, viewingPlaylist.id);
-                    setAddVideoModal(null);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-xl transition-colors"
-                >
-                  <div className="w-6 h-6 bg-red-600 rounded flex items-center justify-center">
-                    <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </div>
-                  <span className="truncate">Remove from {viewingPlaylist.name}</span>
-                </button>
-              )}
-
-              {/* Add to other playlist */}
-              {playlists && playlists.length > (selectedPlaylist ? 1 : 0) && (
-                <div>
-                  <button
-                    onClick={() => setShowPlaylistSubmenu(!showPlaylistSubmenu)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 bg-white/20 rounded flex items-center justify-center">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                        </svg>
-                      </div>
-                      <span>{selectedPlaylist ? 'Other playlist...' : 'Add to playlist...'}</span>
-                    </div>
-                    <svg className={`w-4 h-4 transition-transform ${showPlaylistSubmenu ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-
-                  {/* Playlist submenu */}
-                  {showPlaylistSubmenu && (
-                    <div className="mt-2 max-h-40 overflow-y-auto space-y-1">
-                      {playlists
-                        .filter(p => p.id !== selectedPlaylist?.id)
-                        .map((playlist) => (
-                          <button
-                            key={playlist.id}
-                            onClick={() => {
-                              handleAddToPlaylist(addVideoModal.id, playlist.id);
-                              setAddVideoModal(null);
-                              setShowPlaylistSubmenu(false);
-                            }}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-purple-600/30 rounded-lg transition-colors"
-                          >
-                            <svg className="w-4 h-4 text-purple-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                            </svg>
-                            <span className="truncate">{playlist.name}</span>
-                          </button>
-                        ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <AddVideoModal
+        video={addVideoModal}
+        onClose={() => setAddVideoModal(null)}
+        onPlayVideo={handlePlayVideo}
+        onAddToPlaylist={handleAddToPlaylist}
+        onRemoveFromPlaylist={handleRemoveFromPlaylist}
+        selectedPlaylist={selectedPlaylist}
+        viewingPlaylist={viewingPlaylist}
+        viewMode={viewMode}
+        playlists={playlists}
+        player1Playing={player1State.playing}
+        player2Playing={player2State.playing}
+      />
     </div>
   );
 }
