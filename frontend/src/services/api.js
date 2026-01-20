@@ -253,6 +253,24 @@ export const getChannelState = async (hash) => {
   return response.data;
 };
 
+// Viewer ping - register/update presence
+export const pingViewerPresence = async (hash, viewerId) => {
+  const response = await api.post(`/channel/watch/${hash}/ping`, { viewer_id: viewerId });
+  return response.data;
+};
+
+// Viewer leave - remove presence
+export const leaveChannel = async (hash, viewerId) => {
+  const response = await api.post(`/channel/watch/${hash}/leave`, { viewer_id: viewerId });
+  return response.data;
+};
+
+// Get viewer count for broadcaster
+export const getViewerCount = async (userId) => {
+  const response = await api.get(`/channel/${userId}/viewers`);
+  return response.data;
+};
+
 // Lookup channel by 4-digit code
 export const getChannelByCode = async (code) => {
   const response = await api.get(`/channel/code/${code}`);

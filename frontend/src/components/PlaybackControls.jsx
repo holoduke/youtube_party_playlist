@@ -8,14 +8,11 @@ export default function PlaybackControls({
   onSkipToNext,
   isStopped,
   isAutoFading,
-  hasAnyVideo,
   hasVideoToFadeTo,
   hasPlaylistVideos,
   autoQueueEnabled,
   onToggleAutoQueue,
   nextVideo,
-  playlistRemainingTime,
-  playlistRemainingCount,
 }) {
   const canControl = activeVideo || hasPlaylistVideos;
 
@@ -31,49 +28,114 @@ export default function PlaybackControls({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Calculate time until next song starts (remaining time in current song)
+  const timeUntilNext = activePlayerState.duration > 0
+    ? Math.max(0, activePlayerState.duration - activePlayerState.currentTime)
+    : 0;
+
+  // Play icon component
+  const PlayIcon = ({ active }) => (
+    <div className={`w-5 flex-shrink-0 ${active ? 'text-green-400' : 'text-purple-300/30'}`}>
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    </div>
+  );
+
+  // Next icon component (two play triangles like fade-to-next button)
+  const NextIcon = () => (
+    <div className="w-5 flex-shrink-0 text-purple-300/30">
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M5 5v14l7-7zM12 5v14l7-7z" />
+      </svg>
+    </div>
+  );
+
+  // Shared song row component
+  const SongRow = ({ icon, video, isActive, playerNum, showTime, currentTime, duration, startsIn }) => (
+    <div className="flex items-center gap-3">
+      {/* Icon */}
+      {icon}
+
+      {/* Thumbnail */}
+      {video ? (
+        <div className="relative w-12 h-8 rounded overflow-hidden bg-black/50 flex-shrink-0">
+          <img
+            src={video.thumbnail_url}
+            alt={video.title}
+            className={`w-full h-full object-cover ${isActive ? '' : 'opacity-60'}`}
+          />
+          {playerNum && (
+            <div className={`absolute bottom-0.5 right-0.5 px-1 py-0.5 rounded text-[9px] font-medium ${
+              playerNum === 1 ? 'bg-purple-500/80 text-white' : 'bg-pink-500/80 text-white'
+            }`}>
+              P{playerNum}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="w-12 h-8 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
+          <svg className="w-3 h-3 text-purple-300/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+          </svg>
+        </div>
+      )}
+
+      {/* Song Info */}
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm truncate ${isActive ? 'text-white font-medium' : 'text-purple-300/70'}`}>
+          {video ? video.title : 'No video'}
+        </p>
+        <div className="flex items-center gap-2 text-[11px] text-purple-300/50">
+          {showTime && duration > 0 ? (
+            <>
+              <span className="font-mono">{formatTime(currentTime)}</span>
+              <span>/</span>
+              <span className="font-mono">{formatTime(duration)}</span>
+            </>
+          ) : video?.duration ? (
+            <>
+              <span className="font-mono">{formatDuration(video.duration)}</span>
+              {startsIn > 0 && (
+                <>
+                  <span className="text-purple-300/30">·</span>
+                  <span className="text-purple-300/60">starts in {formatTime(startsIn)}</span>
+                </>
+              )}
+            </>
+          ) : (
+            <span>--:--</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="p-3">
-      {/* Now Playing Info */}
-      <div className="flex items-center gap-3 mb-3">
-        {/* Thumbnail */}
-        {activeVideo ? (
-          <div className="relative w-14 h-9 rounded-lg overflow-hidden bg-black/50 flex-shrink-0">
-            <img
-              src={activeVideo.thumbnail_url}
-              alt={activeVideo.title}
-              className="w-full h-full object-cover"
-            />
-            <div className={`absolute inset-0 border-2 rounded-lg ${activePlayer === 1 ? 'border-purple-500' : 'border-pink-500'}`} />
-          </div>
-        ) : (
-          <div className="w-14 h-9 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-purple-300/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-            </svg>
-          </div>
-        )}
-
-        {/* Song Info */}
-        <div className="flex-1 min-w-0">
-          <p className="text-white text-sm font-medium truncate">
-            {activeVideo ? activeVideo.title : 'No video loaded'}
-          </p>
-          <div className="flex items-center gap-2 text-xs text-purple-300/60">
-            {activePlayerState.duration > 0 ? (
-              <>
-                <span>{formatTime(activePlayerState.currentTime)}</span>
-                <span>/</span>
-                <span>{formatTime(activePlayerState.duration)}</span>
-              </>
-            ) : (
-              <span>--:-- / --:--</span>
-            )}
-          </div>
-        </div>
+      {/* Current & Next Songs */}
+      <div className="space-y-2 mb-3">
+        <SongRow
+          icon={<PlayIcon active={activePlayerState.playing && !isStopped} />}
+          video={activeVideo}
+          isActive={true}
+          playerNum={activeVideo ? activePlayer : null}
+          showTime={true}
+          currentTime={activePlayerState.currentTime}
+          duration={activePlayerState.duration}
+        />
+        <SongRow
+          icon={<NextIcon />}
+          video={nextVideo}
+          isActive={false}
+          playerNum={nextVideo ? (activePlayer === 1 ? 2 : 1) : null}
+          showTime={false}
+          startsIn={nextVideo ? timeUntilNext : 0}
+        />
       </div>
 
       {/* Control Buttons */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 pt-3 border-t border-white/10">
         {/* Play/Pause */}
         <button
           onClick={onPlayPause}
@@ -153,43 +215,6 @@ export default function PlaybackControls({
           </svg>
         </button>
       </div>
-
-      {/* Playlist Remaining */}
-      {playlistRemainingCount > 0 && (
-        <div className="flex items-center justify-between pt-2 mt-2 border-t border-white/10">
-          <span className="text-purple-300/50 text-xs">Playlist:</span>
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-purple-300/70">{playlistRemainingCount} songs</span>
-            <span className="text-purple-300/40">•</span>
-            <span className="text-purple-300/70 font-mono">{formatDuration(playlistRemainingTime)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Next Up */}
-      {nextVideo && (
-        <div className="flex items-center gap-2 pt-2 mt-2 border-t border-white/10">
-          <span className="text-purple-300/50 text-xs flex-shrink-0">Next:</span>
-          <div className="w-12 h-7 rounded overflow-hidden bg-black/50 flex-shrink-0">
-            <img
-              src={nextVideo.thumbnail_url}
-              alt={nextVideo.title}
-              className="w-full h-full object-cover opacity-70"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-purple-300/80 text-xs truncate">{nextVideo.title}</p>
-            <div className="flex items-center gap-2 text-[10px] text-purple-300/50">
-              {nextVideo.duration && (
-                <span className="font-mono">{formatDuration(nextVideo.duration)}</span>
-              )}
-              <span className={`px-1 py-0.5 rounded font-medium ${activePlayer === 1 ? 'bg-pink-500/20 text-pink-300/60' : 'bg-purple-500/20 text-purple-300/60'}`}>
-                P{activePlayer === 1 ? 2 : 1}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

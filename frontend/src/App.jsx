@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getCategories, getVideos, getPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, updatePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, getChannel, startChannelBroadcast, stopChannelBroadcast, syncChannelState } from './services/api';
+import { getCategories, getVideos, getPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, updatePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, getChannel, startChannelBroadcast, stopChannelBroadcast, syncChannelState, getViewerCount } from './services/api';
 import { initEcho, broadcastState } from './services/playerSync';
 import { useUser } from './contexts/UserContext';
 import CategoryFilter from './components/CategoryFilter';
@@ -94,6 +94,7 @@ function App() {
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [broadcastHash, setBroadcastHash] = useState(null);
   const [broadcastCode, setBroadcastCode] = useState(null);
+  const [viewerCount, setViewerCount] = useState(0);
   const broadcastSyncTimeoutRef = useRef(null);
   const videoStartedAtRef = useRef(null); // Timestamp when current video started playing
 
@@ -102,6 +103,12 @@ function App() {
 
   // DJ mute state (local only, doesn't affect viewers)
   const [djMuted, setDjMuted] = useState(false);
+
+  // Fullscreen state for DJ player
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFullscreenControls, setShowFullscreenControls] = useState(true);
+  const playerContainerRef = useRef(null);
+  const fullscreenHideTimeoutRef = useRef(null);
 
   // Account settings modal state
   const [showAccountSettings, setShowAccountSettings] = useState(false);
@@ -496,6 +503,73 @@ function App() {
       }
     };
   }, [isBroadcasting, currentUser, selectedPlaylist, player1Video, player2Video, crossfadeValue, player1State.playing, player2State.playing, player1State.currentTime, player2State.currentTime, isStopped]);
+
+  // Poll for viewer count while broadcasting
+  useEffect(() => {
+    if (!isBroadcasting || !currentUser) {
+      setViewerCount(0);
+      return;
+    }
+
+    const fetchViewerCount = async () => {
+      try {
+        const data = await getViewerCount(currentUser.id);
+        setViewerCount(data.count);
+      } catch (error) {
+        console.error('Failed to fetch viewer count:', error);
+      }
+    };
+
+    // Initial fetch
+    fetchViewerCount();
+
+    // Poll every 5 seconds
+    const interval = setInterval(fetchViewerCount, 5000);
+
+    return () => clearInterval(interval);
+  }, [isBroadcasting, currentUser]);
+
+  // Fullscreen change listener
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFs = !!document.fullscreenElement;
+      setIsFullscreen(isFs);
+      if (isFs) {
+        setShowFullscreenControls(true);
+        startFullscreenHideTimer();
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  // Start timer to hide fullscreen controls
+  const startFullscreenHideTimer = () => {
+    if (fullscreenHideTimeoutRef.current) {
+      clearTimeout(fullscreenHideTimeoutRef.current);
+    }
+    fullscreenHideTimeoutRef.current = setTimeout(() => {
+      setShowFullscreenControls(false);
+    }, 3000);
+  };
+
+  // Show controls on mouse/touch activity in fullscreen
+  const handleFullscreenActivity = () => {
+    if (!isFullscreen) return;
+    setShowFullscreenControls(true);
+    startFullscreenHideTimer();
+  };
+
+  // Toggle fullscreen for DJ player
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement && playerContainerRef.current) {
+      playerContainerRef.current.requestFullscreen().catch(err => {
+        console.log('Fullscreen error:', err);
+      });
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen();
+    }
+  };
 
   useEffect(() => {
     if (viewMode === 'categories') {
@@ -1185,6 +1259,17 @@ function App() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Format playlist duration (handles hours)
+  const formatPlaylistDuration = (seconds) => {
+    if (!seconds || seconds <= 0) return '';
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+      return `${hours}h ${mins}m`;
+    }
+    return `${mins}m`;
+  };
+
   // Auto-play track index (tracks which song in the playlist we're on)
   const [autoPlayIndex, setAutoPlayIndex] = useState(0);
   const [isAutoFading, setIsAutoFading] = useState(false);
@@ -1523,10 +1608,13 @@ function App() {
     ? autoPlayVideos[activeVideoIndex + 1]
     : null;
 
-  // Calculate remaining playlist time and count
+  // Calculate remaining playlist time, count, and total time
   const playlistRemainingInfo = (() => {
+    // Total playlist duration (all videos)
+    const totalTime = autoPlayVideos.reduce((sum, v) => sum + (v.duration || 0), 0);
+
     if (activeVideoIndex < 0 || autoPlayVideos.length === 0) {
-      return { time: 0, count: 0 };
+      return { time: 0, count: 0, totalTime };
     }
     // Remaining videos after the current one
     const remainingVideos = autoPlayVideos.slice(activeVideoIndex + 1);
@@ -1537,7 +1625,8 @@ function App() {
     const currentRemaining = Math.max(0, (activePlayerState.duration || 0) - (activePlayerState.currentTime || 0));
     return {
       time: Math.round(remainingDuration + currentRemaining),
-      count: remainingCount
+      count: remainingCount,
+      totalTime
     };
   })();
 
@@ -1703,6 +1792,7 @@ function App() {
                 currentUser={currentUser}
                 isBroadcasting={isBroadcasting}
                 broadcastCode={broadcastCode}
+                viewerCount={viewerCount}
                 selectedPlaylist={selectedPlaylist}
                 onBroadcastStart={(result) => {
                   setIsBroadcasting(true);
@@ -1720,7 +1810,16 @@ function App() {
               />
 
               {/* Stacked Video Players - opacity controlled by crossfade */}
-              <div className="relative aspect-video rounded-xl overflow-hidden border-2 border-purple-500/50 shadow-lg shadow-purple-500/20">
+              <div
+                ref={playerContainerRef}
+                className={`relative overflow-hidden ${
+                  isFullscreen
+                    ? 'w-screen h-screen bg-black cursor-none'
+                    : 'aspect-video rounded-xl border-2 border-purple-500/50 shadow-lg shadow-purple-500/20'
+                } ${isFullscreen && showFullscreenControls ? '!cursor-default' : ''}`}
+                onMouseMove={handleFullscreenActivity}
+                onTouchStart={handleFullscreenActivity}
+              >
                 {/* Player 1 - bottom layer */}
                 <div
                   className="absolute inset-0 transition-opacity duration-300"
@@ -1741,6 +1840,7 @@ function App() {
                     isInPlaylist={selectedPlaylist?.videos?.some(v => v.id === player1Video?.id)}
                     onVideoDrop={handleQueueToPlaylist}
                     showDropOverlay={isGlobalDragging}
+                    hideOverlays={isFullscreen}
                   />
                 </div>
 
@@ -1764,6 +1864,7 @@ function App() {
                     onVideoDrop={handleQueueToPlaylist}
                     isInPlaylist={selectedPlaylist?.videos?.some(v => v.id === player2Video?.id)}
                     showDropOverlay={isGlobalDragging}
+                    hideOverlays={isFullscreen}
                   />
                 </div>
 
@@ -1782,35 +1883,144 @@ function App() {
                   </div>
                 )}
 
-                {/* DJ Mute button */}
-                <button
-                  onClick={() => setDjMuted(!djMuted)}
-                  className={`absolute top-2 right-2 z-20 p-2 rounded-lg backdrop-blur-sm transition-all ${
-                    djMuted
-                      ? 'bg-red-500/80 text-white'
-                      : 'bg-black/50 text-white/70 hover:bg-black/70 hover:text-white'
-                  }`}
-                  title={djMuted ? 'Unmute (DJ only)' : 'Mute (DJ only)'}
-                >
-                  {djMuted ? (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                    </svg>
-                  )}
-                </button>
+                {/* DJ control buttons - hidden in fullscreen */}
+                {!isFullscreen && (
+                  <div className="absolute top-2 right-2 z-20 flex gap-2">
+                    {/* Fullscreen button */}
+                    <button
+                      onClick={toggleFullscreen}
+                      className="p-2 rounded-lg backdrop-blur-sm transition-all bg-black/50 text-white/70 hover:bg-black/70 hover:text-white"
+                      title="Fullscreen"
+                    >
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                      </svg>
+                    </button>
 
-                {/* Next up indicator */}
-                {(player1Video || player2Video) && (
+                    {/* Mute button */}
+                    <button
+                      onClick={() => setDjMuted(!djMuted)}
+                      className={`p-2 rounded-lg backdrop-blur-sm transition-all ${
+                        djMuted
+                          ? 'bg-red-500/80 text-white'
+                          : 'bg-black/50 text-white/70 hover:bg-black/70 hover:text-white'
+                      }`}
+                      title={djMuted ? 'Unmute (DJ only)' : 'Mute (DJ only)'}
+                    >
+                      {djMuted ? (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Next up indicator - hidden in fullscreen */}
+                {!isFullscreen && (player1Video || player2Video) && (
                   <div className="absolute bottom-2 right-2 z-20 px-2 py-1 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-white/80 flex items-center gap-2">
                     <span className="text-white/50">Next:</span>
                     <span className="font-medium truncate max-w-32">
                       {crossfadeValue < 50 ? (player2Video?.title || 'None') : (player1Video?.title || 'None')}
                     </span>
+                  </div>
+                )}
+
+                {/* Fullscreen control bar - appears on mouse/touch activity */}
+                {isFullscreen && (
+                  <div
+                    className={`absolute bottom-0 left-0 right-0 z-30 transition-all duration-300 ${
+                      showFullscreenControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full pointer-events-none'
+                    }`}
+                  >
+                    <div className="bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-16 pb-6 px-6">
+                      {/* Song info */}
+                      <div className="mb-4">
+                        <p className="text-white text-lg font-medium truncate">
+                          {activeVideo?.title || 'No video playing'}
+                        </p>
+                        <p className="text-white/50 text-sm">
+                          {formatTime(activePlayerState.currentTime)} / {formatTime(activePlayerState.duration)}
+                        </p>
+                      </div>
+
+                      {/* Control buttons */}
+                      <div className="flex items-center gap-4">
+                        {/* Play/Pause */}
+                        <button
+                          onClick={() => {
+                            setIsStopped(false);
+                            toggleActivePlayer();
+                          }}
+                          className="w-14 h-14 flex items-center justify-center rounded-full bg-white text-black hover:scale-105 transition-transform"
+                        >
+                          {activePlayerState.playing ? (
+                            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+                              <rect x="6" y="5" width="4" height="14" rx="1" />
+                              <rect x="14" y="5" width="4" height="14" rx="1" />
+                            </svg>
+                          ) : (
+                            <svg className="w-7 h-7 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Fade to Next */}
+                        <button
+                          onClick={skipToNextWithFade}
+                          disabled={isAutoFading || !(activePlayer === 1 ? player2Video : player1Video)}
+                          className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${
+                            !isAutoFading && (activePlayer === 1 ? player2Video : player1Video)
+                              ? 'bg-white/20 text-white hover:bg-white/30'
+                              : 'bg-white/10 text-white/30 cursor-not-allowed'
+                          }`}
+                          title="Fade to next"
+                        >
+                          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M5 5v14l7-7zM12 5v14l7-7z" />
+                          </svg>
+                        </button>
+
+                        {/* Mute */}
+                        <button
+                          onClick={() => setDjMuted(!djMuted)}
+                          className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${
+                            djMuted ? 'bg-red-500/50 text-white' : 'bg-white/20 text-white hover:bg-white/30'
+                          }`}
+                        >
+                          {djMuted ? (
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                            </svg>
+                          ) : (
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Spacer */}
+                        <div className="flex-1" />
+
+                        {/* Exit fullscreen */}
+                        <button
+                          onClick={toggleFullscreen}
+                          className="w-12 h-12 flex items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-all"
+                          title="Exit fullscreen"
+                        >
+                          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1861,10 +2071,9 @@ function App() {
                         <>
                           <p className="text-white font-medium text-sm truncate">{selectedPlaylist.name}</p>
                           <p className="text-purple-300/60 text-xs">
-                            {activeVideoIndex >= 0 ? (
-                              <span className="text-green-400">{activeVideoIndex + 1}/{selectedPlaylist.videos?.length || 0}</span>
-                            ) : (
-                              `${selectedPlaylist.videos?.length || 0} videos`
+                            {selectedPlaylist.videos?.length || 0} songs
+                            {playlistRemainingInfo.totalTime > 0 && (
+                              <span className="ml-1">· {formatPlaylistDuration(playlistRemainingInfo.totalTime)}</span>
                             )}
                           </p>
                         </>
@@ -1917,14 +2126,11 @@ function App() {
                   onSkipToNext={skipToNextWithFade}
                   isStopped={isStopped}
                   isAutoFading={isAutoFading}
-                  hasAnyVideo={player1Video || player2Video}
                   hasVideoToFadeTo={activePlayer === 1 ? !!player2Video : !!player1Video}
                   hasPlaylistVideos={!!selectedPlaylist?.videos?.length}
                   autoQueueEnabled={autoQueueEnabled}
                   onToggleAutoQueue={() => setAutoQueueEnabled(prev => !prev)}
                   nextVideo={nextVideo}
-                  playlistRemainingTime={playlistRemainingInfo.time}
-                  playlistRemainingCount={playlistRemainingInfo.count}
                 />
               </div>
 

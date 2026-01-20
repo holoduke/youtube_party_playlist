@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Channel;
+use App\Models\LiveStat;
 use App\Models\Playlist;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -121,22 +122,112 @@ class ChannelController extends Controller
     {
         $channel = Channel::with('currentPlaylist')
             ->where('hash', $hash)
-            ->where('is_broadcasting', true)
             ->first();
 
         if (!$channel) {
             return response()->json([
                 'is_broadcasting' => false,
-                'message' => 'Channel not found or not broadcasting',
+                'message' => 'Channel not found',
             ], 404);
         }
+
+        if (!$channel->is_broadcasting) {
+            return response()->json([
+                'is_broadcasting' => false,
+                'message' => 'Channel not broadcasting',
+            ]);
+        }
+
+        // Get active viewer count (1 min timeout since ping is every 15s)
+        $viewerCount = LiveStat::where('channel_id', $channel->id)
+            ->active(1)
+            ->count();
 
         return response()->json([
             'is_broadcasting' => true,
             'state' => $channel->state,
             'idle_image_url' => $channel->idle_image_url,
             'playlist_name' => $channel->currentPlaylist?->name,
+            'viewer_count' => $viewerCount,
         ]);
+    }
+
+    /**
+     * POST /api/channel/watch/{hash}/ping - Register/update viewer presence
+     */
+    public function viewerPing(Request $request, string $hash)
+    {
+        $channel = Channel::where('hash', $hash)
+            ->where('is_broadcasting', true)
+            ->first();
+
+        if (!$channel) {
+            return response()->json(['error' => 'Channel not found'], 404);
+        }
+
+        $validated = $request->validate([
+            'viewer_id' => 'required|string|max:255',
+        ]);
+
+        // Upsert viewer record
+        LiveStat::updateOrCreate(
+            [
+                'channel_id' => $channel->id,
+                'viewer_id' => $validated['viewer_id'],
+            ],
+            [
+                'last_seen_at' => now(),
+            ]
+        );
+
+        // Cleanup stale records for this channel (older than 1 minute)
+        LiveStat::where('channel_id', $channel->id)
+            ->stale(1)
+            ->delete();
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * POST /api/channel/watch/{hash}/leave - Remove viewer when leaving
+     */
+    public function viewerLeave(Request $request, string $hash)
+    {
+        $channel = Channel::where('hash', $hash)->first();
+
+        if (!$channel) {
+            return response()->json(['error' => 'Channel not found'], 404);
+        }
+
+        $validated = $request->validate([
+            'viewer_id' => 'required|string|max:255',
+        ]);
+
+        LiveStat::where('channel_id', $channel->id)
+            ->where('viewer_id', $validated['viewer_id'])
+            ->delete();
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
+     * GET /api/channel/{userId}/viewers - Get viewer count for broadcaster
+     */
+    public function viewerCount(int $userId)
+    {
+        $channel = Channel::where('user_id', $userId)
+            ->where('is_broadcasting', true)
+            ->first();
+
+        if (!$channel) {
+            return response()->json(['count' => 0]);
+        }
+
+        $count = LiveStat::where('channel_id', $channel->id)
+            ->active(1)
+            ->count();
+
+        return response()->json(['count' => $count]);
     }
 
     /**

@@ -1,7 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import YouTube from 'react-youtube';
-import { getChannelState } from '../services/api';
+import { getChannelState, pingViewerPresence, leaveChannel } from '../services/api';
+
+// Generate or retrieve a persistent viewer ID
+const getViewerId = () => {
+  let viewerId = localStorage.getItem('barmania_viewer_id');
+  if (!viewerId) {
+    viewerId = 'v_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+    localStorage.setItem('barmania_viewer_id', viewerId);
+  }
+  return viewerId;
+};
 
 export default function BroadcastViewer() {
   const { hash } = useParams();
@@ -415,6 +425,45 @@ export default function BroadcastViewer() {
 
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [hash]);
+
+  // Viewer presence tracking - ping every 30 seconds, leave on unmount
+  useEffect(() => {
+    if (!hash) return;
+
+    const viewerId = getViewerId();
+    let pingIntervalId = null;
+
+    // Initial ping
+    pingViewerPresence(hash, viewerId).catch(err => {
+      console.log('Viewer ping error:', err);
+    });
+
+    // Ping every 15 seconds
+    pingIntervalId = setInterval(() => {
+      pingViewerPresence(hash, viewerId).catch(err => {
+        console.log('Viewer ping error:', err);
+      });
+    }, 15000);
+
+    // Leave on beforeunload (tab close/refresh)
+    const handleBeforeUnload = () => {
+      // Use sendBeacon for reliability on page unload
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      navigator.sendBeacon(
+        `${API_BASE_URL}/api/channel/watch/${hash}/leave`,
+        JSON.stringify({ viewer_id: viewerId })
+      );
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Cleanup on unmount
+    return () => {
+      if (pingIntervalId) clearInterval(pingIntervalId);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Call leave API on unmount (normal navigation)
+      leaveChannel(hash, viewerId).catch(() => {});
     };
   }, [hash]);
 

@@ -1,7 +1,7 @@
 import YouTube from 'react-youtube';
 import { useRef, useEffect, useState, useImperativeHandle, forwardRef, memo, useMemo, useCallback } from 'react';
 
-const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, onStateUpdate, onError, autoStart = true, onAddToPlaylist, isInPlaylist, onVideoDrop, showDropOverlay }, ref) => {
+const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeUpdate, onEnded, onStateUpdate, onError, autoStart = true, onAddToPlaylist, isInPlaylist, onVideoDrop, showDropOverlay, hideOverlays = false }, ref) => {
   const playerRef = useRef(null);
   const intervalRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -311,14 +311,16 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
         </div>
       )}
 
-      <div className={`absolute top-2 left-2 z-10 px-3 py-1 ${labelBg} rounded-full text-xs font-bold text-white flex items-center gap-1.5`}>
-        <span>Player {playerNumber}</span>
-        {isPlaying && (
-          <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-        )}
-      </div>
+      {!hideOverlays && (
+        <div className={`absolute top-2 left-2 z-10 px-3 py-1 ${labelBg} rounded-full text-xs font-bold text-white flex items-center gap-1.5`}>
+          <span>Player {playerNumber}</span>
+          {isPlaying && (
+            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+          )}
+        </div>
+      )}
 
-      {video && duration > 0 && (
+      {!hideOverlays && video && duration > 0 && (
         <div className="absolute top-2 right-2 z-10 px-2 py-1 bg-black/70 rounded text-xs text-white font-mono">
           {formatTime(currentTime)} / {formatTime(duration)}
         </div>
@@ -348,7 +350,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       </div>
 
       {/* Video title */}
-      {video && (
+      {!hideOverlays && video && (
         <div className="px-3 py-2 bg-black/80 rounded-b-xl">
           <div className="flex items-center gap-2">
             <p className="text-white font-medium text-sm truncate flex-1">{video.title}</p>
@@ -400,7 +402,8 @@ const MemoizedVideoPlayer = memo(VideoPlayer, (prevProps, nextProps) => {
     prevProps.playerNumber === nextProps.playerNumber &&
     prevProps.isActive === nextProps.isActive &&
     prevProps.isInPlaylist === nextProps.isInPlaylist &&
-    prevProps.showDropOverlay === nextProps.showDropOverlay
+    prevProps.showDropOverlay === nextProps.showDropOverlay &&
+    prevProps.hideOverlays === nextProps.hideOverlays
   );
 });
 
