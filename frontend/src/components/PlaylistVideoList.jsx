@@ -165,7 +165,15 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
               </div>
 
               {/* Thumbnail */}
-              <div className="relative flex-shrink-0 w-24 h-14 rounded-lg overflow-hidden bg-gray-800">
+              <div
+                className={`relative flex-shrink-0 w-24 h-14 rounded-lg overflow-hidden bg-gray-800 ${!isActive && !isPending ? 'cursor-pointer hover:ring-2 hover:ring-green-500/50' : ''}`}
+                onClick={(e) => {
+                  if (isActive || isPending) return;
+                  e.stopPropagation();
+                  setPendingVideoId(video.id);
+                  onPlay(video, index);
+                }}
+              >
                 <img
                   src={video.thumbnail_url || `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`}
                   alt={video.title}
