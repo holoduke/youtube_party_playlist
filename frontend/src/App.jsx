@@ -1647,6 +1647,9 @@ function App() {
         }}
         onPlaylistUpdated={(updated) => {
           setSelectedPlaylist(updated);
+          if (viewingPlaylist?.id === updated.id) {
+            setViewingPlaylist(updated);
+          }
           setShowPlaylistModal(false);
         }}
         showNotification={showNotification}
