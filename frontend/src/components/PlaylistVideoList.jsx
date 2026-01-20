@@ -195,16 +195,16 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                     {[0, 120, 240, 60, 180, 300, 90, 210].map((delay, i) => (
                       <span
                         key={i}
-                        className="w-1.5 bg-green-400 rounded-t animate-equalizer"
+                        className="w-1 bg-green-400 rounded-t animate-equalizer"
                         style={{ animationDelay: `${delay}ms` }}
                       />
                     ))}
                     <style>{`
                       @keyframes equalizer {
-                        0%, 100% { height: 15%; }
-                        25% { height: 90%; }
-                        50% { height: 40%; }
-                        75% { height: 70%; }
+                        0%, 100% { height: 8%; }
+                        25% { height: 45%; }
+                        50% { height: 20%; }
+                        75% { height: 35%; }
                       }
                       .animate-equalizer {
                         animation: equalizer 0.6s ease-in-out infinite;
