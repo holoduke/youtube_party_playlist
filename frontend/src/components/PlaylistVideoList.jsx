@@ -183,22 +183,23 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
                   </div>
                 )}
                 {isActive && !isPending && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                    <div className="flex gap-0.5 items-end h-5">
-                      <span className="w-1 bg-green-400 rounded-full animate-equalizer" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-1 bg-green-400 rounded-full animate-equalizer" style={{ animationDelay: '180ms' }}></span>
-                      <span className="w-1 bg-green-400 rounded-full animate-equalizer" style={{ animationDelay: '360ms' }}></span>
-                      <span className="w-1 bg-green-400 rounded-full animate-equalizer" style={{ animationDelay: '540ms' }}></span>
-                    </div>
+                  <div className="absolute inset-0 flex items-end justify-around px-1 pb-1 bg-black/40">
+                    {[0, 120, 240, 60, 180, 300, 90, 210].map((delay, i) => (
+                      <span
+                        key={i}
+                        className="w-1.5 bg-green-400 rounded-t animate-equalizer"
+                        style={{ animationDelay: `${delay}ms` }}
+                      />
+                    ))}
                     <style>{`
                       @keyframes equalizer {
-                        0%, 100% { height: 4px; }
-                        25% { height: 16px; }
-                        50% { height: 8px; }
-                        75% { height: 20px; }
+                        0%, 100% { height: 15%; }
+                        25% { height: 90%; }
+                        50% { height: 40%; }
+                        75% { height: 70%; }
                       }
                       .animate-equalizer {
-                        animation: equalizer 0.8s ease-in-out infinite;
+                        animation: equalizer 0.6s ease-in-out infinite;
                       }
                     `}</style>
                   </div>
