@@ -239,6 +239,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       controls: 1,
       modestbranding: 1,
       rel: 0,
+      fs: 0, // Disable YouTube fullscreen button - we have our own
       enablejsapi: 1,
       playsinline: 1,
       origin: window.location.origin,
