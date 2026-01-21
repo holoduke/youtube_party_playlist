@@ -1378,8 +1378,10 @@ function App() {
   // Fade trigger data for broadcast viewers - they animate locally based on this
   const fadeTriggeredRef = useRef(null);
 
-  // Get the auto-play video list (from selected playlist or viewing playlist)
-  const autoPlayVideos = selectedPlaylist?.videos || viewingPlaylist?.videos || [];
+  // Get the auto-play video list (from selected playlist only - must have videos array)
+  const autoPlayVideos = (selectedPlaylist?.videos && selectedPlaylist.videos.length > 0)
+    ? selectedPlaylist.videos
+    : [];
 
   // Manual crossfade between the two players
   const skipToNextWithFade = useCallback(() => {
