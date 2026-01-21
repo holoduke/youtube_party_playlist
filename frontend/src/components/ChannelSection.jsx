@@ -7,9 +7,13 @@ export default function ChannelSection({
   broadcastCode,
   viewerCount,
   selectedPlaylist,
+  playlistRemainingInfo,
+  formatPlaylistDuration,
   onBroadcastStart,
   onBroadcastStop,
   onShowBroadcastModal,
+  onShowPlaylistModal,
+  onShowPlaylistSettings,
   showNotification,
 }) {
   const [isToggling, setIsToggling] = useState(false);
@@ -39,7 +43,8 @@ export default function ChannelSection({
 
   return (
     <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all overflow-hidden ${isBroadcasting ? 'border-green-500/50' : 'border-white/10'}`}>
-      <div className="p-3 flex items-center gap-3">
+      {/* Channel row */}
+      <div className="p-3 flex items-center gap-3 border-b border-white/10">
         {/* Broadcast toggle icon */}
         <button
           onClick={handleToggleBroadcast}
@@ -89,6 +94,58 @@ export default function ChannelSection({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
           </svg>
+        )}
+      </div>
+
+      {/* Playlist row */}
+      <div className="p-3 flex items-center gap-3">
+        <div
+          onClick={onShowPlaylistModal}
+          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+        >
+          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+            </svg>
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            {selectedPlaylist ? (
+              <>
+                <p className="text-white font-medium text-sm truncate">{selectedPlaylist.name}</p>
+                <p className="text-purple-300/60 text-xs">
+                  {selectedPlaylist.videos?.length || 0} songs
+                  {playlistRemainingInfo?.totalTime > 0 && (
+                    <span className="ml-1">· {formatPlaylistDuration(playlistRemainingInfo.totalTime)}</span>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-white font-medium text-sm">Select Playlist</p>
+                <p className="text-purple-300/60 text-xs">Choose or create a playlist</p>
+              </>
+            )}
+          </div>
+          <svg className="w-5 h-5 text-purple-300/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+          </svg>
+        </div>
+
+        {/* Settings Button */}
+        {selectedPlaylist && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onShowPlaylistSettings();
+            }}
+            className="p-2 rounded-lg bg-white/10 text-purple-300/60 hover:bg-white/20 hover:text-white transition-all flex-shrink-0"
+            title="Playlist Settings"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
         )}
       </div>
     </div>
