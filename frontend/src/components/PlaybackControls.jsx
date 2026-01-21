@@ -163,45 +163,7 @@ function PlaybackControls({
     return (
       <div className="p-2">
         <div className="flex items-center gap-2">
-          {/* Expand button */}
-          <button
-            onClick={() => setIsCollapsed(false)}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 transition-colors flex-shrink-0"
-            title="Expand"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {/* Current song mini info */}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <PlayIcon active={activePlayerState.playing && !isStopped} />
-            {activeVideo ? (
-              <div className="relative w-10 h-7 rounded overflow-hidden bg-black/50 flex-shrink-0">
-                <img
-                  src={activeVideo.thumbnail_url}
-                  alt={activeVideo.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div className="w-10 h-7 rounded bg-white/10 flex-shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-medium truncate">
-                {activeVideo?.title || 'No video'}
-              </p>
-              <p className="text-purple-300/50 text-[10px] font-mono">
-                {activePlayerState.duration > 0
-                  ? `${formatTime(activePlayerState.currentTime)} / ${formatTime(activePlayerState.duration)}`
-                  : '--:--'
-                }
-              </p>
-            </div>
-          </div>
-
-          {/* Compact controls - right side */}
+          {/* Compact controls - left side */}
           <div className="flex items-center gap-1 flex-shrink-0">
             <ControlButton
               onClick={onPlayPause}
@@ -234,6 +196,44 @@ function PlaybackControls({
               </svg>
             </ControlButton>
           </div>
+
+          {/* Current song mini info */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <PlayIcon active={activePlayerState.playing && !isStopped} />
+            {activeVideo ? (
+              <div className="relative w-10 h-7 rounded overflow-hidden bg-black/50 flex-shrink-0">
+                <img
+                  src={activeVideo.thumbnail_url}
+                  alt={activeVideo.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-10 h-7 rounded bg-white/10 flex-shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-xs font-medium truncate">
+                {activeVideo?.title || 'No video'}
+              </p>
+              <p className="text-purple-300/50 text-[10px] font-mono">
+                {activePlayerState.duration > 0
+                  ? `${formatTime(activePlayerState.currentTime)} / ${formatTime(activePlayerState.duration)}`
+                  : '--:--'
+                }
+              </p>
+            </div>
+          </div>
+
+          {/* Expand button - right side */}
+          <button
+            onClick={() => setIsCollapsed(false)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 transition-colors flex-shrink-0"
+            title="Expand"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
         </div>
       </div>
     );
