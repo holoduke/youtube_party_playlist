@@ -74,10 +74,8 @@ export default function ChannelSection({
           <p className={`font-medium text-sm ${isBroadcasting ? 'text-green-400' : 'text-white'}`}>
             Your Channel
           </p>
-          {isBroadcasting ? (
+          {isBroadcasting && (
             <p className="text-green-300/60 text-xs">Viewers: {viewerCount ?? 0}</p>
-          ) : (
-            <p className="text-purple-300/60 text-xs">Click icon to broadcast</p>
           )}
         </div>
 
