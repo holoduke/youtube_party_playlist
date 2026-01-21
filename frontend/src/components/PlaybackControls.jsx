@@ -163,6 +163,17 @@ function PlaybackControls({
     return (
       <div className="p-2">
         <div className="flex items-center gap-2">
+          {/* Expand button */}
+          <button
+            onClick={() => setIsCollapsed(false)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 transition-colors flex-shrink-0"
+            title="Expand"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
           {/* Current song mini info */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <PlayIcon active={activePlayerState.playing && !isStopped} />
@@ -190,7 +201,7 @@ function PlaybackControls({
             </div>
           </div>
 
-          {/* Compact controls */}
+          {/* Compact controls - right side */}
           <div className="flex items-center gap-1 flex-shrink-0">
             <ControlButton
               onClick={onPlayPause}
@@ -222,17 +233,6 @@ function PlaybackControls({
                 <path d="M5 5v14l7-7zM12 5v14l7-7z" />
               </svg>
             </ControlButton>
-
-            {/* Expand button */}
-            <button
-              onClick={() => setIsCollapsed(false)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white/60 hover:bg-white/20 transition-colors"
-              title="Expand"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
           </div>
         </div>
       </div>
