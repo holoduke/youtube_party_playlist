@@ -110,7 +110,6 @@ function App() {
   const playerContainerRef = useRef(null);
   const fullscreenHideTimeoutRef = useRef(null);
   const previousOrientationRef = useRef(null); // Store orientation before fullscreen
-  const orientationLockedRef = useRef(false); // Track if orientation is locked after fullscreen exit
 
   // Account settings modal state
   const [showAccountSettings, setShowAccountSettings] = useState(false);
@@ -546,27 +545,6 @@ function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Orientation change listener - unlock when user rotates to portrait after exiting fullscreen
-  // We use a timestamp to ignore the initial orientation change caused by our own lock
-  const orientationLockTimeRef = useRef(0);
-  useEffect(() => {
-    const handleOrientationChange = () => {
-      // Only unlock if: locked, in portrait, AND at least 1 second has passed since lock
-      // This prevents unlocking immediately when we programmatically lock to portrait
-      const timeSinceLock = Date.now() - orientationLockTimeRef.current;
-      if (orientationLockedRef.current && screen.orientation?.type?.startsWith('portrait') && timeSinceLock > 1000) {
-        // User has physically rotated to portrait, unlock orientation
-        try {
-          screen.orientation.unlock?.();
-        } catch {
-          // Unlock not supported
-        }
-        orientationLockedRef.current = false;
-      }
-    };
-    screen.orientation?.addEventListener?.('change', handleOrientationChange);
-    return () => screen.orientation?.removeEventListener?.('change', handleOrientationChange);
-  }, []);
 
   // Start timer to hide fullscreen controls
   const startFullscreenHideTimer = () => {
@@ -605,24 +583,13 @@ function App() {
         console.log('Fullscreen error:', err);
       }
     } else if (document.fullscreenElement) {
-      // Lock to portrait when exiting fullscreen, stay locked until user rotates to portrait
+      // Lock to portrait when exiting fullscreen if user was in portrait before
       if (screen.orientation?.lock && previousOrientationRef.current === 'portrait') {
         try {
           await screen.orientation.lock('portrait');
-          orientationLockedRef.current = true; // Mark as locked, will unlock when user rotates to portrait
-          orientationLockTimeRef.current = Date.now(); // Track when we locked to ignore immediate events
         } catch {
           // Lock not supported
-          orientationLockedRef.current = false;
         }
-      } else {
-        // Was in landscape before, just unlock
-        try {
-          screen.orientation?.unlock?.();
-        } catch {
-          // Orientation control not supported
-        }
-        orientationLockedRef.current = false;
       }
       document.exitFullscreen();
     }
