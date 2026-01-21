@@ -110,6 +110,7 @@ function App() {
   const playerContainerRef = useRef(null);
   const fullscreenHideTimeoutRef = useRef(null);
   const previousOrientationRef = useRef(null); // Store orientation before fullscreen
+  const orientationLockedRef = useRef(false); // Track if orientation is locked after fullscreen exit
 
   // Account settings modal state
   const [showAccountSettings, setShowAccountSettings] = useState(false);
@@ -545,6 +546,23 @@ function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  // Orientation change listener - unlock when user rotates to portrait after exiting fullscreen
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      if (orientationLockedRef.current && screen.orientation?.type?.startsWith('portrait')) {
+        // User has rotated to portrait, unlock orientation
+        try {
+          screen.orientation.unlock?.();
+        } catch {
+          // Unlock not supported
+        }
+        orientationLockedRef.current = false;
+      }
+    };
+    screen.orientation?.addEventListener?.('change', handleOrientationChange);
+    return () => screen.orientation?.removeEventListener?.('change', handleOrientationChange);
+  }, []);
+
   // Start timer to hide fullscreen controls
   const startFullscreenHideTimer = () => {
     if (fullscreenHideTimeoutRef.current) {
@@ -582,18 +600,23 @@ function App() {
         console.log('Fullscreen error:', err);
       }
     } else if (document.fullscreenElement) {
-      // Restore previous orientation when exiting fullscreen
-      if (screen.orientation?.lock && previousOrientationRef.current) {
+      // Lock to portrait when exiting fullscreen, stay locked until user rotates to portrait
+      if (screen.orientation?.lock && previousOrientationRef.current === 'portrait') {
         try {
-          await screen.orientation.lock(previousOrientationRef.current);
+          await screen.orientation.lock('portrait');
+          orientationLockedRef.current = true; // Mark as locked, will unlock when user rotates to portrait
         } catch {
-          // Lock not supported, try unlocking instead
-          try {
-            screen.orientation.unlock?.();
-          } catch {
-            // Orientation control not supported
-          }
+          // Lock not supported
+          orientationLockedRef.current = false;
         }
+      } else {
+        // Was in landscape before, just unlock
+        try {
+          screen.orientation?.unlock?.();
+        } catch {
+          // Orientation control not supported
+        }
+        orientationLockedRef.current = false;
       }
       document.exitFullscreen();
     }
