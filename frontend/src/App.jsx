@@ -547,10 +547,15 @@ function App() {
   }, []);
 
   // Orientation change listener - unlock when user rotates to portrait after exiting fullscreen
+  // We use a timestamp to ignore the initial orientation change caused by our own lock
+  const orientationLockTimeRef = useRef(0);
   useEffect(() => {
     const handleOrientationChange = () => {
-      if (orientationLockedRef.current && screen.orientation?.type?.startsWith('portrait')) {
-        // User has rotated to portrait, unlock orientation
+      // Only unlock if: locked, in portrait, AND at least 1 second has passed since lock
+      // This prevents unlocking immediately when we programmatically lock to portrait
+      const timeSinceLock = Date.now() - orientationLockTimeRef.current;
+      if (orientationLockedRef.current && screen.orientation?.type?.startsWith('portrait') && timeSinceLock > 1000) {
+        // User has physically rotated to portrait, unlock orientation
         try {
           screen.orientation.unlock?.();
         } catch {
@@ -605,6 +610,7 @@ function App() {
         try {
           await screen.orientation.lock('portrait');
           orientationLockedRef.current = true; // Mark as locked, will unlock when user rotates to portrait
+          orientationLockTimeRef.current = Date.now(); // Track when we locked to ignore immediate events
         } catch {
           // Lock not supported
           orientationLockedRef.current = false;
