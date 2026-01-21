@@ -578,12 +578,17 @@ function App() {
         console.log('Fullscreen error:', err);
       }
     } else if (document.fullscreenElement) {
-      // Unlock orientation when exiting fullscreen
-      if (screen.orientation?.unlock) {
+      // Lock to portrait when exiting fullscreen on mobile
+      if (screen.orientation?.lock) {
         try {
-          screen.orientation.unlock();
+          await screen.orientation.lock('portrait');
         } catch {
-          // Orientation unlock not supported
+          // Portrait lock not supported, try unlocking instead
+          try {
+            screen.orientation.unlock?.();
+          } catch {
+            // Orientation control not supported
+          }
         }
       }
       document.exitFullscreen();
