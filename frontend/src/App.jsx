@@ -1925,6 +1925,7 @@ function App() {
                 } ${isFullscreen && showFullscreenControls ? '!cursor-default' : ''}`}
                 onMouseMove={handleFullscreenActivity}
                 onTouchStart={handleFullscreenActivity}
+                onClick={handleFullscreenActivity}
               >
                 {/* Player 1 - bottom layer (pointer-events disabled when not active) */}
                 <div
