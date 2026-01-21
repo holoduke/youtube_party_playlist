@@ -1163,6 +1163,43 @@ function App() {
       videoStartedAtRef.current = Date.now();
     }
 
+    // When playback starts via native YouTube button, activate playlist mode if we have a playlist
+    if (isPlaying && !playlistMode && selectedPlaylist?.videos?.length > 0) {
+      const playlistVideos = selectedPlaylist.videos;
+      const currentVideo = playerNumber === 1 ? player1Video : player2Video;
+      const currentIndex = playlistVideos.findIndex(v => v.id === currentVideo?.id);
+
+      // Only activate playlist mode if the current video is in the playlist
+      if (currentIndex >= 0) {
+        console.log('[Native Play] Activating playlist mode from native YouTube button');
+        setActivePlaylist(selectedPlaylist);
+        setPlaylistMode(true);
+        setAutoPlayEnabled(true);
+        setIsStopped(false);
+
+        // Load next video into the inactive player if not already loaded
+        const nextIndex = (currentIndex + 1) % playlistVideos.length;
+        const nextVideo = playlistVideos[nextIndex];
+        const inactivePlayerVideo = playerNumber === 1 ? player2Video : player1Video;
+
+        if (playlistVideos.length > 1 && inactivePlayerVideo?.id !== nextVideo.id) {
+          console.log(`[Native Play] Pre-loading next song "${nextVideo.title}" into Player ${playerNumber === 1 ? 2 : 1}`);
+          if (playerNumber === 1) {
+            setPlayer2Video(nextVideo);
+            setRestoredVideoIds(prev => ({ ...prev, player2: nextVideo.youtube_id }));
+          } else {
+            setPlayer1Video(nextVideo);
+            setRestoredVideoIds(prev => ({ ...prev, player1: nextVideo.youtube_id }));
+          }
+        }
+      }
+    }
+
+    // Clear stopped state when playback starts
+    if (isPlaying && isStopped) {
+      setIsStopped(false);
+    }
+
     if (syncEnabled) {
       broadcastState({
         player1Video,
@@ -1172,7 +1209,7 @@ function App() {
         player2State: playerStatesRef.current.player2State,
       });
     }
-  }, [player1Video, player2Video, crossfadeValue, syncEnabled]);
+  }, [player1Video, player2Video, crossfadeValue, syncEnabled, playlistMode, selectedPlaylist, isStopped]);
 
   // Handler for time updates from players
   const handleTimeUpdate = useCallback((playerNumber, currentTime, duration) => {
