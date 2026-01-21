@@ -1990,6 +1990,14 @@ function App() {
                   </div>
                 )}
 
+                {/* Fullscreen tap overlay - captures taps when controls are hidden */}
+                {isFullscreen && !showFullscreenControls && (
+                  <div
+                    className="absolute inset-0 z-20"
+                    onClick={handleFullscreenActivity}
+                  />
+                )}
+
                 {/* DJ control buttons - hidden in fullscreen */}
                 {!isFullscreen && (
                   <div className="absolute top-2 right-2 z-20 flex gap-2">
