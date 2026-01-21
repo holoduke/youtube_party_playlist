@@ -311,7 +311,11 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
 
   return (
     <div
-      className={`relative rounded-xl overflow-hidden border-2 ${borderColor} ${isActive ? `shadow-lg ${glowColor}` : ''} ${isDragOver ? 'ring-4 ring-green-500 scale-[1.02]' : ''} transition-all duration-300 max-w-full`}
+      className={`relative overflow-hidden transition-all duration-300 max-w-full ${
+        hideOverlays
+          ? ''
+          : `rounded-xl border-2 ${borderColor} ${isActive ? `shadow-lg ${glowColor}` : ''}`
+      } ${isDragOver ? 'ring-4 ring-green-500 scale-[1.02]' : ''}`}
       style={{ contain: 'layout' }}
     >
       {/* Drop overlay - only rendered when dragging */}
