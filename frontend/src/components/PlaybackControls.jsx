@@ -255,9 +255,7 @@ export default function PlaybackControls({
           disabled={!canControl}
           className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
             canControl
-              ? activePlayerState.playing
-                ? 'bg-purple-500 text-white'
-                : 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
+              ? 'bg-purple-500 text-white hover:bg-purple-400'
               : 'bg-white/5 text-white/30 cursor-not-allowed'
           }`}
           title={activePlayerState.playing ? 'Pause' : 'Play'}
