@@ -109,6 +109,7 @@ function App() {
   const [showFullscreenControls, setShowFullscreenControls] = useState(true);
   const playerContainerRef = useRef(null);
   const fullscreenHideTimeoutRef = useRef(null);
+  const previousOrientationRef = useRef(null); // Store orientation before fullscreen
 
   // Account settings modal state
   const [showAccountSettings, setShowAccountSettings] = useState(false);
@@ -565,6 +566,9 @@ function App() {
   const toggleFullscreen = async () => {
     if (!document.fullscreenElement && playerContainerRef.current) {
       try {
+        // Remember current orientation before entering fullscreen
+        previousOrientationRef.current = screen.orientation?.type?.startsWith('portrait') ? 'portrait' : 'landscape';
+
         await playerContainerRef.current.requestFullscreen();
         // Try to lock to landscape on mobile
         if (screen.orientation?.lock) {
@@ -578,12 +582,12 @@ function App() {
         console.log('Fullscreen error:', err);
       }
     } else if (document.fullscreenElement) {
-      // Lock to portrait when exiting fullscreen on mobile
-      if (screen.orientation?.lock) {
+      // Restore previous orientation when exiting fullscreen
+      if (screen.orientation?.lock && previousOrientationRef.current) {
         try {
-          await screen.orientation.lock('portrait');
+          await screen.orientation.lock(previousOrientationRef.current);
         } catch {
-          // Portrait lock not supported, try unlocking instead
+          // Lock not supported, try unlocking instead
           try {
             screen.orientation.unlock?.();
           } catch {
