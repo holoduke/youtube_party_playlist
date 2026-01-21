@@ -226,29 +226,8 @@ export default function PlaybackControls({
   // Expanded view (original)
   return (
     <div className="p-3">
-      {/* Current & Next Songs */}
-      <div className="space-y-2 mb-3">
-        <SongRow
-          icon={<PlayIcon active={activePlayerState.playing && !isStopped} />}
-          video={activeVideo}
-          isActive={true}
-          playerNum={activeVideo ? activePlayer : null}
-          showTime={true}
-          currentTime={activePlayerState.currentTime}
-          duration={activePlayerState.duration}
-        />
-        <SongRow
-          icon={<NextIcon />}
-          video={nextVideo}
-          isActive={false}
-          playerNum={nextVideo ? (activePlayer === 1 ? 2 : 1) : null}
-          showTime={false}
-          startsIn={nextVideo ? timeUntilNext : 0}
-        />
-      </div>
-
       {/* Control Buttons */}
-      <div className="flex items-center gap-2 pt-3 border-t border-white/10">
+      <div className="flex items-center gap-2 pb-3 mb-3 border-b border-white/10">
         {/* Play/Pause */}
         <button
           onClick={onPlayPause}
@@ -339,6 +318,27 @@ export default function PlaybackControls({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>
         </button>
+      </div>
+
+      {/* Current & Next Songs */}
+      <div className="space-y-2">
+        <SongRow
+          icon={<PlayIcon active={activePlayerState.playing && !isStopped} />}
+          video={activeVideo}
+          isActive={true}
+          playerNum={activeVideo ? activePlayer : null}
+          showTime={true}
+          currentTime={activePlayerState.currentTime}
+          duration={activePlayerState.duration}
+        />
+        <SongRow
+          icon={<NextIcon />}
+          video={nextVideo}
+          isActive={false}
+          playerNum={nextVideo ? (activePlayer === 1 ? 2 : 1) : null}
+          showTime={false}
+          startsIn={nextVideo ? timeUntilNext : 0}
+        />
       </div>
     </div>
   );
