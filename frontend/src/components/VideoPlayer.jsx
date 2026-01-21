@@ -189,6 +189,12 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       loadVideoInternal(newVideoId, autoStart);
     }
 
+    // If player is ready, same video is already loaded, autoStart is true, but not playing - play it
+    // This handles the case where a restored video is clicked to play explicitly
+    if (isPlayerReady && newVideoId && newVideoId === loadedVideoIdRef.current && autoStart && !isPlaying && playerRef.current) {
+      playerRef.current.playVideo();
+    }
+
     // If video was removed, reset state
     if (!newVideoId) {
       loadedVideoIdRef.current = null;
@@ -197,7 +203,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       setIsPlaying(false);
       stopTimeTracking();
     }
-  }, [video?.youtube_id, isPlayerReady, autoStart, loadVideoInternal, stopTimeTracking, initialVideoId]);
+  }, [video?.youtube_id, isPlayerReady, autoStart, loadVideoInternal, stopTimeTracking, initialVideoId, isPlaying]);
 
   // Stable opts - never changes after mount (autoplay disabled, we control via API)
   const opts = useMemo(() => ({
