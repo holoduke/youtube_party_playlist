@@ -80,13 +80,17 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
 
     intervalRef.current = setInterval(() => {
       if (playerRef.current) {
-        const time = playerRef.current.getCurrentTime() || 0;
-        const dur = playerRef.current.getDuration() || 0;
-        setCurrentTime(time);
-        setDuration(dur);
+        try {
+          const time = playerRef.current.getCurrentTime() || 0;
+          const dur = playerRef.current.getDuration() || 0;
+          setCurrentTime(time);
+          setDuration(dur);
 
-        if (onTimeUpdate && dur > 0) {
-          onTimeUpdate(playerNumber, time, dur);
+          if (onTimeUpdate && dur > 0) {
+            onTimeUpdate(playerNumber, time, dur);
+          }
+        } catch {
+          // Player might be in an invalid state (iframe destroyed)
         }
       }
     }, 500);
@@ -103,10 +107,14 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     setCurrentTime(0);
     setDuration(0);
 
-    if (shouldAutoPlay) {
-      playerRef.current.loadVideoById(videoId);
-    } else {
-      playerRef.current.cueVideoById(videoId);
+    try {
+      if (shouldAutoPlay) {
+        playerRef.current.loadVideoById(videoId);
+      } else {
+        playerRef.current.cueVideoById(videoId);
+      }
+    } catch {
+      // Player might be in an invalid state
     }
   }, []);
 
@@ -114,18 +122,30 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
   useImperativeHandle(ref, () => ({
     play: () => {
       if (playerRef.current) {
-        playerRef.current.playVideo();
+        try {
+          playerRef.current.playVideo();
+        } catch {
+          // Player might be in an invalid state
+        }
       }
     },
     pause: () => {
       console.log(`[Player ${playerNumber}] pause() called, playerRef:`, playerRef.current);
       if (playerRef.current) {
-        playerRef.current.pauseVideo();
+        try {
+          playerRef.current.pauseVideo();
+        } catch {
+          // Player might be in an invalid state
+        }
       }
     },
     seekTo: (time, allowSeekAhead = true) => {
       if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
-        playerRef.current.seekTo(time, allowSeekAhead);
+        try {
+          playerRef.current.seekTo(time, allowSeekAhead);
+        } catch {
+          // Player might be in an invalid state
+        }
       }
     },
     destroy: () => {
@@ -192,7 +212,11 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
     // If player is ready, same video is already loaded, autoStart is true, but not playing - play it
     // This handles the case where a restored video is clicked to play explicitly
     if (isPlayerReady && newVideoId && newVideoId === loadedVideoIdRef.current && autoStart && !isPlaying && playerRef.current) {
-      playerRef.current.playVideo();
+      try {
+        playerRef.current.playVideo();
+      } catch {
+        // Player might be in an invalid state
+      }
     }
 
     // If video was removed, reset state
@@ -224,13 +248,18 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
   const onReady = useCallback((event) => {
     playerRef.current = event.target;
     setIsPlayerReady(true);
-    // Use the ref to ensure we get the latest volume value
-    event.target.setVolume(pendingVolumeRef.current);
     startTimeTracking();
 
-    // Only auto-start on initial load if autoStart is true
-    if (autoStartRef.current) {
-      event.target.playVideo();
+    try {
+      // Use the ref to ensure we get the latest volume value
+      event.target.setVolume(pendingVolumeRef.current);
+
+      // Only auto-start on initial load if autoStart is true
+      if (autoStartRef.current) {
+        event.target.playVideo();
+      }
+    } catch {
+      // Player might be in an invalid state
     }
   }, [startTimeTracking]);
 
