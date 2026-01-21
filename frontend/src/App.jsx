@@ -1993,8 +1993,17 @@ function App() {
                 {/* Fullscreen tap overlay - captures taps when controls are hidden */}
                 {isFullscreen && !showFullscreenControls && (
                   <div
-                    className="absolute inset-0 z-20"
-                    onClick={handleFullscreenActivity}
+                    className="absolute inset-0 z-50 cursor-pointer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleFullscreenActivity();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleFullscreenActivity();
+                    }}
                   />
                 )}
 
