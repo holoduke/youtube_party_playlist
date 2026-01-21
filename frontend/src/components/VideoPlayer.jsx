@@ -305,7 +305,6 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
 
   const borderColor = playerNumber === 1 ? 'border-purple-500' : 'border-pink-500';
   const glowColor = playerNumber === 1 ? 'shadow-purple-500/30' : 'shadow-pink-500/30';
-  const labelBg = playerNumber === 1 ? 'bg-purple-600' : 'bg-pink-600';
 
   // Use initial video ID for YouTube component (stable, never changes)
   const stableVideoId = initialVideoId || video?.youtube_id;
@@ -346,17 +345,8 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
         </div>
       )}
 
-      {!hideOverlays && (
-        <div className={`absolute top-2 left-2 z-10 px-3 py-1 ${labelBg} rounded-full text-xs font-bold text-white flex items-center gap-1.5`}>
-          <span>Player {playerNumber}</span>
-          {isPlaying && (
-            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-          )}
-        </div>
-      )}
-
       {!hideOverlays && video && duration > 0 && (
-        <div className="absolute top-2 right-2 z-10 px-2 py-1 bg-black/70 rounded text-xs text-white font-mono">
+        <div className="absolute top-2 right-2 z-10 px-2 py-1 bg-black/70 rounded text-xs text-white font-mono pointer-events-none">
           {formatTime(currentTime)} / {formatTime(duration)}
         </div>
       )}
