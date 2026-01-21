@@ -2175,10 +2175,37 @@ function App() {
                 </div>
               </div>
 
-              {/* Combined Playlist & Playback Controls */}
-              <div className={`bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} overflow-hidden`}>
+              {/* Playback Controls */}
+              <div className="mt-1 bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 overflow-hidden">
+                <PlaybackControls
+                  activeVideo={activeVideo}
+                  activePlayer={activePlayer}
+                  activePlayerState={activePlayerState}
+                  formatTime={formatTime}
+                  onPlayPause={() => {
+                    setIsStopped(false);
+                    toggleActivePlayer();
+                  }}
+                  onStop={() => {
+                    if (player1Ref.current) player1Ref.current.pause();
+                    if (player2Ref.current) player2Ref.current.pause();
+                    setIsStopped(true);
+                  }}
+                  onSkipToNext={skipToNextWithFade}
+                  isStopped={isStopped}
+                  isAutoFading={isAutoFading}
+                  hasVideoToFadeTo={activePlayer === 1 ? !!player2Video : !!player1Video}
+                  hasPlaylistVideos={!!selectedPlaylist?.videos?.length}
+                  autoQueueEnabled={autoQueueEnabled}
+                  onToggleAutoQueue={() => setAutoQueueEnabled(prev => !prev)}
+                  nextVideo={nextVideo}
+                />
+              </div>
+
+              {/* Playlist Selector */}
+              <div className={`mt-1 bg-white/5 backdrop-blur-xl rounded-xl border transition-all ${autoPlayEnabled ? 'border-green-500/30' : 'border-white/10'} overflow-hidden`}>
                 {/* Playlist Header */}
-                <div className="p-3 flex items-center gap-3 border-b border-white/10">
+                <div className="p-3 flex items-center gap-3">
                   <div
                     onClick={() => setShowPlaylistModal(true)}
                     className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
@@ -2229,31 +2256,6 @@ function App() {
                   )}
 
                 </div>
-
-                {/* Playback Controls */}
-                <PlaybackControls
-                  activeVideo={activeVideo}
-                  activePlayer={activePlayer}
-                  activePlayerState={activePlayerState}
-                  formatTime={formatTime}
-                  onPlayPause={() => {
-                    setIsStopped(false);
-                    toggleActivePlayer();
-                  }}
-                  onStop={() => {
-                    if (player1Ref.current) player1Ref.current.pause();
-                    if (player2Ref.current) player2Ref.current.pause();
-                    setIsStopped(true);
-                  }}
-                  onSkipToNext={skipToNextWithFade}
-                  isStopped={isStopped}
-                  isAutoFading={isAutoFading}
-                  hasVideoToFadeTo={activePlayer === 1 ? !!player2Video : !!player1Video}
-                  hasPlaylistVideos={!!selectedPlaylist?.videos?.length}
-                  autoQueueEnabled={autoQueueEnabled}
-                  onToggleAutoQueue={() => setAutoQueueEnabled(prev => !prev)}
-                  nextVideo={nextVideo}
-                />
               </div>
 
               {(playerErrors.player1 || playerErrors.player2) && (
