@@ -562,12 +562,30 @@ function App() {
   };
 
   // Toggle fullscreen for DJ player
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     if (!document.fullscreenElement && playerContainerRef.current) {
-      playerContainerRef.current.requestFullscreen().catch(err => {
+      try {
+        await playerContainerRef.current.requestFullscreen();
+        // Try to lock to landscape on mobile
+        if (screen.orientation?.lock) {
+          try {
+            await screen.orientation.lock('landscape');
+          } catch {
+            // Orientation lock not supported or not allowed
+          }
+        }
+      } catch (err) {
         console.log('Fullscreen error:', err);
-      });
+      }
     } else if (document.fullscreenElement) {
+      // Unlock orientation when exiting fullscreen
+      if (screen.orientation?.unlock) {
+        try {
+          screen.orientation.unlock();
+        } catch {
+          // Orientation unlock not supported
+        }
+      }
       document.exitFullscreen();
     }
   };
@@ -1899,9 +1917,9 @@ function App() {
                 onMouseMove={handleFullscreenActivity}
                 onTouchStart={handleFullscreenActivity}
               >
-                {/* Player 1 - bottom layer */}
+                {/* Player 1 - bottom layer (pointer-events disabled when not active) */}
                 <div
-                  className="absolute inset-0 transition-opacity duration-300"
+                  className={`absolute inset-0 transition-opacity duration-300 ${crossfadeValue >= 50 ? 'pointer-events-none' : ''}`}
                   style={{ opacity: (100 - crossfadeValue) / 100 }}
                 >
                   <VideoPlayer
@@ -1923,9 +1941,9 @@ function App() {
                   />
                 </div>
 
-                {/* Player 2 - top layer */}
+                {/* Player 2 - top layer (pointer-events disabled when not active) */}
                 <div
-                  className="absolute inset-0 transition-opacity duration-300"
+                  className={`absolute inset-0 transition-opacity duration-300 ${crossfadeValue < 50 ? 'pointer-events-none' : ''}`}
                   style={{ opacity: crossfadeValue / 100 }}
                 >
                   <VideoPlayer
