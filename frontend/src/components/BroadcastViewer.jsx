@@ -597,14 +597,23 @@ export default function BroadcastViewer() {
       return;
     }
 
-    console.log(`[Video Load] Player 1: loading ${videoId}`);
     player1LoadedVideoIdRef.current = videoId;
+    const isActive = crossfadeRef.current < 50;
+    console.log(`[Video Load] Player 1: loading ${videoId} (active=${isActive})`);
 
     try {
       player1Ref.current.loadVideoById(videoId);
-      // Also call playVideo in case loadVideoById doesn't auto-start
-      setTimeout(() => player1Ref.current?.playVideo(), 100);
+      player1Ref.current.playVideo();
       player1CommandedPlayingRef.current = true;
+
+      // If inactive, pause at 0 after brief play (keeps user-gesture privilege)
+      if (!isActive) {
+        setTimeout(() => {
+          player1Ref.current?.pauseVideo();
+          player1Ref.current?.seekTo(0, true);
+          player1CommandedPlayingRef.current = false;
+        }, 300);
+      }
     } catch (e) {
       console.log('[Video Load] Player 1 error:', e);
     }
@@ -624,14 +633,23 @@ export default function BroadcastViewer() {
       return;
     }
 
-    console.log(`[Video Load] Player 2: loading ${videoId}`);
     player2LoadedVideoIdRef.current = videoId;
+    const isActive = crossfadeRef.current >= 50;
+    console.log(`[Video Load] Player 2: loading ${videoId} (active=${isActive})`);
 
     try {
       player2Ref.current.loadVideoById(videoId);
-      // Also call playVideo in case loadVideoById doesn't auto-start
-      setTimeout(() => player2Ref.current?.playVideo(), 100);
+      player2Ref.current.playVideo();
       player2CommandedPlayingRef.current = true;
+
+      // If inactive, pause at 0 after brief play (keeps user-gesture privilege)
+      if (!isActive) {
+        setTimeout(() => {
+          player2Ref.current?.pauseVideo();
+          player2Ref.current?.seekTo(0, true);
+          player2CommandedPlayingRef.current = false;
+        }, 300);
+      }
     } catch (e) {
       console.log('[Video Load] Player 2 error:', e);
     }
@@ -707,11 +725,18 @@ export default function BroadcastViewer() {
     // If there's a video waiting to be loaded, load it now
     const videoId = player1Video?.youtube_id;
     if (videoId && player1LoadedVideoIdRef.current !== videoId) {
-      console.log(`[onReady] Player 1: loading ${videoId}`);
       player1LoadedVideoIdRef.current = videoId;
-      event.target.loadVideoById(videoId);
-      setTimeout(() => player1Ref.current?.playVideo(), 100);
-      player1CommandedPlayingRef.current = true;
+      const isActive = crossfadeRef.current < 50;
+      if (isActive) {
+        console.log(`[onReady] Player 1: loading and playing ${videoId} (active)`);
+        event.target.loadVideoById(videoId);
+        setTimeout(() => player1Ref.current?.playVideo(), 100);
+        player1CommandedPlayingRef.current = true;
+      } else {
+        console.log(`[onReady] Player 1: cueing ${videoId} (inactive)`);
+        event.target.cueVideoById(videoId);
+        player1CommandedPlayingRef.current = false;
+      }
     }
   };
 
@@ -723,11 +748,18 @@ export default function BroadcastViewer() {
     // If there's a video waiting to be loaded, load it now
     const videoId = player2Video?.youtube_id;
     if (videoId && player2LoadedVideoIdRef.current !== videoId) {
-      console.log(`[onReady] Player 2: loading ${videoId}`);
       player2LoadedVideoIdRef.current = videoId;
-      event.target.loadVideoById(videoId);
-      setTimeout(() => player2Ref.current?.playVideo(), 100);
-      player2CommandedPlayingRef.current = true;
+      const isActive = crossfadeRef.current >= 50;
+      if (isActive) {
+        console.log(`[onReady] Player 2: loading and playing ${videoId} (active)`);
+        event.target.loadVideoById(videoId);
+        setTimeout(() => player2Ref.current?.playVideo(), 100);
+        player2CommandedPlayingRef.current = true;
+      } else {
+        console.log(`[onReady] Player 2: cueing ${videoId} (inactive)`);
+        event.target.cueVideoById(videoId);
+        player2CommandedPlayingRef.current = false;
+      }
     }
   };
 
@@ -735,22 +767,40 @@ export default function BroadcastViewer() {
   const handleUnmute = () => {
     console.log('User clicked unmute, crossfadeRef:', crossfadeRef.current, 'animatedCrossfade:', animatedCrossfade);
     setIsMuted(false);
-    // Gradual volume based on crossfade position
+
+    const player1IsActive = crossfadeRef.current < 50;
+
+    // Unmute both players
+    safePlayerCall(player1Ref, 'unMute');
+    safePlayerCall(player2Ref, 'unMute');
+
+    // Set volumes based on crossfade
     const vol1 = 100 - animatedCrossfade;
     const vol2 = animatedCrossfade;
-    console.log('Setting volumes: vol1=', vol1, 'vol2=', vol2);
-    safePlayerCall(player1Ref, 'unMute');
     safePlayerCall(player1Ref, 'setVolume', vol1);
     player1LastVolumeRef.current = vol1;
-    safePlayerCall(player2Ref, 'unMute');
     safePlayerCall(player2Ref, 'setVolume', vol2);
     player2LastVolumeRef.current = vol2;
 
-    // IMPORTANT: Start BOTH players in this single user gesture
-    // This gives both players "user-initiated" privilege so they continue in background
-    // Volume/crossfade will control which one is actually heard
+    // Start both players briefly (user gesture gives permission)
+    // Then pause the inactive one
     safePlayerCall(player1Ref, 'playVideo');
     safePlayerCall(player2Ref, 'playVideo');
+
+    // Pause inactive player after brief play (to keep user-gesture privilege)
+    setTimeout(() => {
+      if (player1IsActive) {
+        // Player 2 is inactive - pause it at 0
+        player2Ref.current?.pauseVideo();
+        player2Ref.current?.seekTo(0, true);
+        player2CommandedPlayingRef.current = false;
+      } else {
+        // Player 1 is inactive - pause it at 0
+        player1Ref.current?.pauseVideo();
+        player1Ref.current?.seekTo(0, true);
+        player1CommandedPlayingRef.current = false;
+      }
+    }, 200);
   };
 
   // Handle fullscreen toggle

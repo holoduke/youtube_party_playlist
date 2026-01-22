@@ -827,20 +827,16 @@ function App() {
           if (savedState) {
             try {
               const state = JSON.parse(savedState);
-              // Restore active player video (crossfade determines which is active)
+              // Restore active player video to Player 1 (always start with crossfade at 0)
               const savedCrossfade = typeof state.crossfadeValue === 'number' ? state.crossfadeValue : 0;
               const activePlayerVideo = savedCrossfade < 50 ? state.player1Video : state.player2Video;
 
               if (activePlayerVideo) {
-                console.log(`[Playlist Load] Restoring last played video: "${activePlayerVideo.title}"`);
-                if (savedCrossfade < 50) {
-                  setPlayer1Video(activePlayerVideo);
-                  setRestoredVideoIds({ player1: activePlayerVideo.youtube_id, player2: null });
-                } else {
-                  setPlayer2Video(activePlayerVideo);
-                  setRestoredVideoIds({ player1: null, player2: activePlayerVideo.youtube_id });
-                }
-                setCrossfadeValue(savedCrossfade);
+                console.log(`[Playlist Load] Restoring last played video: "${activePlayerVideo.title}" to Player 1`);
+                // Always restore to Player 1 and reset crossfade to 0
+                setPlayer1Video(activePlayerVideo);
+                setRestoredVideoIds({ player1: activePlayerVideo.youtube_id, player2: null });
+                // Don't restore crossfadeValue - always start at 0
               }
               // Don't restore inactive player - playlist sync effect will set the correct next video
             } catch (e) {
@@ -878,18 +874,15 @@ function App() {
           if (savedState) {
             try {
               const state = JSON.parse(savedState);
-              // Track which videos are being restored (they shouldn't auto-start)
-              const restored = { player1: null, player2: null };
-              if (state.player1Video) {
-                setPlayer1Video(state.player1Video);
-                restored.player1 = state.player1Video.youtube_id;
+              // Restore the active video to Player 1 (always start with crossfade at 0)
+              const savedCrossfade = typeof state.crossfadeValue === 'number' ? state.crossfadeValue : 0;
+              const activePlayerVideo = savedCrossfade < 50 ? state.player1Video : state.player2Video;
+
+              if (activePlayerVideo) {
+                setPlayer1Video(activePlayerVideo);
+                setRestoredVideoIds({ player1: activePlayerVideo.youtube_id, player2: null });
               }
-              if (state.player2Video) {
-                setPlayer2Video(state.player2Video);
-                restored.player2 = state.player2Video.youtube_id;
-              }
-              setRestoredVideoIds(restored);
-              if (typeof state.crossfadeValue === 'number') setCrossfadeValue(state.crossfadeValue);
+              // Don't restore crossfadeValue - always start at 0 so Player 1 is fully visible
               if (state.autoPlayEnabled) {
                 setAutoPlayEnabled(true);
                 if (typeof state.autoPlayIndex === 'number') setAutoPlayIndex(state.autoPlayIndex);
