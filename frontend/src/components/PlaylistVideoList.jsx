@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 // Format duration from seconds to MM:SS
 const formatDuration = (seconds) => {
@@ -14,6 +14,76 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
   const [isDragging, setIsDragging] = useState(false);
   const [isOverTrash, setIsOverTrash] = useState(false);
   const [pendingVideoId, setPendingVideoId] = useState(null);
+
+  // Auto-scroll refs
+  const containerRef = useRef(null);
+  const videoRefs = useRef({});
+  const lastInteractionRef = useRef(Date.now());
+  const autoScrollTimeoutRef = useRef(null);
+
+  // Reset interaction timer on user activity
+  const resetInteractionTimer = useCallback(() => {
+    lastInteractionRef.current = Date.now();
+  }, []);
+
+  // Auto-scroll to active video after 10 seconds of inactivity
+  useEffect(() => {
+    if (!activeVideoId) return;
+
+    const checkAndScroll = () => {
+      const timeSinceInteraction = Date.now() - lastInteractionRef.current;
+
+      if (timeSinceInteraction >= 10000) {
+        // 10 seconds of inactivity - scroll to active video
+        const activeVideoElement = videoRefs.current[activeVideoId];
+        const container = containerRef.current;
+
+        if (activeVideoElement && container) {
+          // Check if element is already visible
+          const containerRect = container.getBoundingClientRect();
+          const elementRect = activeVideoElement.getBoundingClientRect();
+
+          const isVisible =
+            elementRect.top >= containerRect.top &&
+            elementRect.bottom <= containerRect.bottom;
+
+          if (!isVisible) {
+            activeVideoElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+          }
+        }
+      }
+    };
+
+    // Check every 2 seconds
+    autoScrollTimeoutRef.current = setInterval(checkAndScroll, 2000);
+
+    return () => {
+      if (autoScrollTimeoutRef.current) {
+        clearInterval(autoScrollTimeoutRef.current);
+      }
+    };
+  }, [activeVideoId]);
+
+  // Track user interactions on the container
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleInteraction = () => resetInteractionTimer();
+
+    container.addEventListener('scroll', handleInteraction);
+    container.addEventListener('mousedown', handleInteraction);
+    container.addEventListener('touchstart', handleInteraction);
+
+    return () => {
+      container.removeEventListener('scroll', handleInteraction);
+      container.removeEventListener('mousedown', handleInteraction);
+      container.removeEventListener('touchstart', handleInteraction);
+    };
+  }, [resetInteractionTimer]);
 
   // Clear pending state when the video becomes active
   useEffect(() => {
@@ -118,7 +188,7 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
       )}
 
       {/* Video List - Row Layout */}
-      <div className="flex flex-col gap-2 p-4">
+      <div ref={containerRef} className="flex flex-col gap-2 p-4">
         {videos.map((video, index) => {
           const isActive = video.id === activeVideoId;
           const isPending = video.id === pendingVideoId;
@@ -126,8 +196,9 @@ export default function PlaylistVideoList({ videos, onReorder, onRemove, onPlay,
           return (
             <div
               key={video.id}
+              ref={(el) => { videoRefs.current[video.id] = el; }}
               draggable="true"
-              onDragStart={(e) => handleDragStart(e, index)}
+              onDragStart={(e) => { resetInteractionTimer(); handleDragStart(e, index); }}
               onDragEnd={handleDragEnd}
               onDragOver={(e) => handleDragOver(e, index)}
               onDrop={(e) => handleDrop(e, index)}

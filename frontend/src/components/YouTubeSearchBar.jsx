@@ -66,7 +66,13 @@ export default function YouTubeSearchBar({
                   {searchResults.map((video) => (
                     <div
                       key={video.youtube_id}
-                      className="flex items-center gap-3 p-3 hover:bg-white/5 transition-colors group"
+                      draggable="true"
+                      onDragStart={(e) => {
+                        // Mark as YouTube video for special handling
+                        e.dataTransfer.setData('application/json', JSON.stringify({ ...video, isYouTubeSearch: true }));
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
+                      className="flex items-center gap-3 p-3 hover:bg-white/5 transition-colors group cursor-grab active:cursor-grabbing"
                     >
                       {/* Thumbnail */}
                       <div className="relative flex-shrink-0 w-24 h-14 rounded-lg overflow-hidden bg-black/50">
