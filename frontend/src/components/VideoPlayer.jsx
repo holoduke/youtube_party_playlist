@@ -238,11 +238,13 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       autoplay: 0, // Never autoplay on mount - we control playback via API
       controls: 1,
       modestbranding: 1,
-      rel: 0,
+      rel: 0, // Only show related videos from same channel
       fs: 0, // Disable YouTube fullscreen button - we have our own
       enablejsapi: 1,
       playsinline: 1,
       origin: window.location.origin,
+      iv_load_policy: 3, // Hide video annotations/cards
+      disablekb: 1, // Disable keyboard shortcuts (we handle our own)
     },
   }), []);
 
