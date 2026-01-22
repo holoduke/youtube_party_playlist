@@ -903,15 +903,15 @@ function App() {
   useEffect(() => {
     if (playlists.length > 0 && !selectedPlaylist) {
       const savedPlaylistId = localStorage.getItem('barmania_selected_playlist');
-      // Only use saved playlist if it belongs to the current user's playlists
       const savedId = savedPlaylistId ? parseInt(savedPlaylistId, 10) : null;
-      const savedPlaylistBelongsToUser = savedId && playlists.some(p => p.id === savedId);
-      const playlistId = savedPlaylistBelongsToUser ? savedId : playlists[0].id;
 
-      handleSelectPlaylist(playlistId)
+      // Try to load the saved playlist (could be user's own or a public one)
+      const playlistIdToLoad = savedId || playlists[0].id;
+
+      handleSelectPlaylist(playlistIdToLoad)
         .then(() => {
-          // After playlist is loaded, restore playback state (only if playlist belonged to user)
-          if (savedPlaylistBelongsToUser) {
+          // After playlist is loaded, restore playback state
+          if (savedId) {
             const savedState = localStorage.getItem('barmania_playback_state');
             if (savedState) {
               try {
