@@ -192,31 +192,10 @@ export default function BroadcastViewer() {
         const player1FadedOut = serverCrossfade >= 95;
         const player2FadedOut = serverCrossfade <= 5;
 
-        if (!serverFadeTrigger) {
-          try {
-            // Only sync if player is initialized and not faded out
-            if (serverPlayer1Playing && player1Ref.current && !player1FadedOut && player1InitializedRef.current) {
-              const state1 = player1Ref.current.getPlayerState?.();
-              // State 1 = playing, 3 = buffering - these are OK
-              // -1 = unstarted, 0 = ended, 2 = paused, 5 = cued
-              if (state1 !== 1 && state1 !== 3 && !player1CommandedPlayingRef.current) {
-                console.log(`[YT API] Poll sync: Player 1.playVideo() (state was ${state1})`);
-                player1Ref.current.playVideo();
-                player1CommandedPlayingRef.current = true;
-              }
-            }
-            if (serverPlayer2Playing && player2Ref.current && !player2FadedOut && player2InitializedRef.current) {
-              const state2 = player2Ref.current.getPlayerState?.();
-              if (state2 !== 1 && state2 !== 3 && !player2CommandedPlayingRef.current) {
-                console.log(`[YT API] Poll sync: Player 2.playVideo() (state was ${state2})`);
-                player2Ref.current.playVideo();
-                player2CommandedPlayingRef.current = true;
-              }
-            }
-          } catch (e) {
-            console.log('[YT API] Poll sync error:', e);
-          }
-        }
+        // No auto-start in poll sync - playback is controlled by:
+        // 1. Initial playback effect (runs once after server state received)
+        // 2. Fade trigger handler (starts incoming player during crossfade)
+        // 3. Unmute button (user gesture starts both players)
 
         // Process fade trigger state changes
         if (serverFadeTrigger && serverFadeTrigger.started_at !== lastFadeTriggerRef.current?.started_at) {
@@ -224,16 +203,18 @@ export default function BroadcastViewer() {
           lastFadeTriggerRef.current = serverFadeTrigger;
           setFadeTrigger(serverFadeTrigger);
 
-          // Start the incoming player immediately so it buffers during fade
+          // Ensure incoming player is playing (should already be from loadVideoById)
           // end_value = 100 means fading TO Player 2, end_value = 0 means fading TO Player 1
           const incomingPlayerRef = serverFadeTrigger.end_value === 100 ? player2Ref : player1Ref;
           const incomingPlayerNum = serverFadeTrigger.end_value === 100 ? 2 : 1;
-          const incomingCommandedRef = incomingPlayerNum === 1 ? player1CommandedPlayingRef : player2CommandedPlayingRef;
           try {
-            if (incomingPlayerRef.current && !incomingCommandedRef.current) {
-              console.log(`[YT API] Fade start: Player ${incomingPlayerNum}.playVideo()`);
-              incomingPlayerRef.current.playVideo();
-              incomingCommandedRef.current = true;
+            if (incomingPlayerRef.current) {
+              const state = incomingPlayerRef.current.getPlayerState?.();
+              console.log(`[YT API] Fade start: Player ${incomingPlayerNum} state=${state}`);
+              // If not playing, try to start
+              if (state !== 1 && state !== 3) {
+                incomingPlayerRef.current.playVideo();
+              }
             }
           } catch { /* ignore */ }
         } else if (!serverFadeTrigger && lastFadeTriggerRef.current) {
@@ -359,6 +340,27 @@ export default function BroadcastViewer() {
           return `${mins}:${secs.toString().padStart(2, '0')}`;
         };
 
+        // Helper to convert YT player state to readable string
+        const getPlayerStateText = (state) => {
+          const states = {
+            [-1]: 'unstarted',
+            [0]: 'ended',
+            [1]: 'playing',
+            [2]: 'paused',
+            [3]: 'buffering',
+            [5]: 'cued',
+          };
+          return states[state] ?? `unknown(${state})`;
+        };
+
+        // Get actual YouTube player states
+        let player1State = null;
+        let player2State = null;
+        try {
+          player1State = player1Ref.current?.getPlayerState?.();
+          player2State = player2Ref.current?.getPlayerState?.();
+        } catch { /* ignore */ }
+
         // Update debug info
         setDebugInfo({
           // DJ App player states
@@ -378,7 +380,9 @@ export default function BroadcastViewer() {
           viewerPlayer2Time: formatTime(viewerPlayer2Time),
           player1Diff: Math.abs(serverPlayer1Time - viewerPlayer1Time).toFixed(1),
           player2Diff: Math.abs(serverPlayer2Time - viewerPlayer2Time).toFixed(1),
-          // Viewer state
+          // Viewer YouTube player states
+          player1YTState: getPlayerStateText(player1State),
+          player2YTState: getPlayerStateText(player2State),
           player1Ready: !!player1Ref.current,
           player2Ready: !!player2Ref.current,
           player1Volume: 100 - serverCrossfade,
@@ -443,14 +447,11 @@ export default function BroadcastViewer() {
     };
   }, [hash]);
 
-  // Helper to set volume only if it changed
+  // Helper to set volume only if it changed (no mute/unmute - that's handled separately)
   const setPlayerVolume = (playerRef, lastVolumeRef, newVolume) => {
     if (lastVolumeRef.current !== newVolume) {
-      const playerNum = playerRef === player1Ref ? 1 : 2;
       try {
         if (playerRef.current && typeof playerRef.current.setVolume === 'function') {
-          console.log(`[YT API] Sync: Player ${playerNum}.setVolume(${newVolume})`);
-          if (newVolume === 100) playerRef.current.unMute?.();
           playerRef.current.setVolume(newVolume);
           lastVolumeRef.current = newVolume;
         }
@@ -463,9 +464,9 @@ export default function BroadcastViewer() {
     // Only sync directly when there's no active fade animation
     if (!fadeTrigger) {
       setAnimatedCrossfade(crossfadeValue);
-      // Simple volume switch - active player gets 100, inactive gets 0
-      const vol1 = isMutedRef.current ? 0 : (crossfadeValue < 50 ? 100 : 0);
-      const vol2 = isMutedRef.current ? 0 : (crossfadeValue >= 50 ? 100 : 0);
+      // Gradual volume based on crossfade position
+      const vol1 = isMutedRef.current ? 0 : 100 - crossfadeValue;
+      const vol2 = isMutedRef.current ? 0 : crossfadeValue;
       setPlayerVolume(player1Ref, player1LastVolumeRef, vol1);
       setPlayerVolume(player2Ref, player2LastVolumeRef, vol2);
     }
@@ -482,15 +483,15 @@ export default function BroadcastViewer() {
       cancelAnimationFrame(fadeAnimationRef.current);
     }
 
-    const { started_at, start_value, end_value, duration } = fadeTrigger;
+    const { start_value, end_value, duration } = fadeTrigger;
+    // Use our own start time for smooth animation (not DJ's started_at which may be delayed)
+    const animationStartTime = Date.now();
 
-    // Determine which player is the incoming one (the one we're fading TO)
-    const incomingPlayerRef = end_value === 100 ? player2Ref : player1Ref;
-    const incomingPlayerNum = end_value === 100 ? 2 : 1;
+    console.log(`[Fade] Starting: ${start_value}→${end_value} (${duration}ms)`);
 
     const animate = () => {
       const now = Date.now();
-      const elapsed = now - started_at;
+      const elapsed = now - animationStartTime;
       const progress = Math.min(elapsed / duration, 1);
 
       // Ease-in-out curve
@@ -504,27 +505,28 @@ export default function BroadcastViewer() {
       // Update animated crossfade (drives opacity)
       setAnimatedCrossfade(roundedValue);
 
-      // Simple volume switch at midpoint - no gradual fading
-      // This reduces YouTube API calls and potential spinner issues
+      // Gradual volume fade - update only when changed by 5+ to reduce API calls
       if (!isMutedRef.current) {
-        const vol1 = roundedValue < 50 ? 100 : 0;
-        const vol2 = roundedValue >= 50 ? 100 : 0;
+        const vol1 = 100 - roundedValue;
+        const vol2 = roundedValue;
 
-        if (player1LastVolumeRef.current !== vol1) {
+        // Only update if changed by 5+ or reaching boundaries (0 or 100)
+        const shouldUpdateVol1 = player1LastVolumeRef.current !== vol1 &&
+          (Math.abs(player1LastVolumeRef.current - vol1) >= 5 || vol1 === 0 || vol1 === 100);
+        const shouldUpdateVol2 = player2LastVolumeRef.current !== vol2 &&
+          (Math.abs(player2LastVolumeRef.current - vol2) >= 5 || vol2 === 0 || vol2 === 100);
+
+        if (shouldUpdateVol1) {
           try {
             if (player1Ref.current?.setVolume) {
-              console.log(`[YT API] Fade: Player 1.setVolume(${vol1})`);
-              if (vol1 === 100) player1Ref.current.unMute?.();
               player1Ref.current.setVolume(vol1);
               player1LastVolumeRef.current = vol1;
             }
           } catch { /* ignore */ }
         }
-        if (player2LastVolumeRef.current !== vol2) {
+        if (shouldUpdateVol2) {
           try {
             if (player2Ref.current?.setVolume) {
-              console.log(`[YT API] Fade: Player 2.setVolume(${vol2})`);
-              if (vol2 === 100) player2Ref.current.unMute?.();
               player2Ref.current.setVolume(vol2);
               player2LastVolumeRef.current = vol2;
             }
@@ -541,47 +543,10 @@ export default function BroadcastViewer() {
       }
     };
 
-    // Wait for incoming player to be playing before starting visual fade
-    // This prevents showing YouTube's buffering spinner
-    let waitAttempts = 0;
-    const maxWaitAttempts = 30; // Max 3 seconds (30 * 100ms)
-    let waitTimeoutId = null;
-    let cancelled = false;
-
-    const waitForPlayer = () => {
-      if (cancelled) return;
-      waitAttempts++;
-      try {
-        const state = incomingPlayerRef.current?.getPlayerState?.();
-        // Only accept state 1 (playing) - state 3 (buffering) still shows spinner
-        // States: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
-        if (state === 1 || waitAttempts >= maxWaitAttempts) {
-          if (waitAttempts >= maxWaitAttempts) {
-            console.log(`[Fade] Player ${incomingPlayerNum} not ready after ${waitAttempts * 100}ms (state=${state}), starting anyway`);
-          } else {
-            console.log(`[Fade] Player ${incomingPlayerNum} playing (state=${state}), starting animation`);
-          }
-          console.log('Starting fade animation:', { start_value, end_value, duration });
-          fadeAnimationRef.current = requestAnimationFrame(animate);
-        } else {
-          // Not playing yet, check again
-          console.log(`[Fade] Player ${incomingPlayerNum} waiting (state=${state}, attempt ${waitAttempts})`);
-          waitTimeoutId = setTimeout(waitForPlayer, 100);
-        }
-      } catch {
-        // Player error, start animation anyway
-        console.log('Starting fade animation:', { start_value, end_value, duration });
-        fadeAnimationRef.current = requestAnimationFrame(animate);
-      }
-    };
-
-    waitForPlayer();
+    // Start animation immediately - don't wait for player
+    fadeAnimationRef.current = requestAnimationFrame(animate);
 
     return () => {
-      cancelled = true;
-      if (waitTimeoutId) {
-        clearTimeout(waitTimeoutId);
-      }
       if (fadeAnimationRef.current) {
         cancelAnimationFrame(fadeAnimationRef.current);
       }
@@ -618,79 +583,66 @@ export default function BroadcastViewer() {
     }
   };
 
-  // Load video via API when video changes (no re-render needed)
-  // Load immediately - don't skip during fades (skipping causes wrong video to be visible)
+  // Load video via API when video changes
   useEffect(() => {
-    if (!player1Ref.current || !player1Video?.youtube_id) return;
+    const videoId = player1Video?.youtube_id;
+    if (!videoId) return;
 
-    const loadedVideoId = player1LoadedVideoIdRef.current;
-    if (loadedVideoId === player1Video.youtube_id) return;
+    // Check if already loaded
+    if (player1LoadedVideoIdRef.current === videoId) return;
 
-    player1LoadedVideoIdRef.current = player1Video.youtube_id;
-    player1LoadingRef.current = true;
-    player1CommandedPlayingRef.current = false; // Reset - new video is cued, not playing
+    // Wait for player to be ready
+    if (!player1Ref.current) {
+      console.log(`[Video Load] Player 1: waiting for player ref (videoId=${videoId})`);
+      return;
+    }
+
+    console.log(`[Video Load] Player 1: loading ${videoId}`);
+    player1LoadedVideoIdRef.current = videoId;
+
     try {
-      console.log(`[YT API] Player 1.cueVideoById(${player1Video.youtube_id})`);
-      player1Ref.current.cueVideoById(player1Video.youtube_id);
-      setTimeout(() => {
-        player1LoadingRef.current = false;
-        // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
-        if (!isMutedRef.current) {
-          safePlayerCall(player1Ref, 'unMute');
-        }
-        // Only start playback if DJ says this player should be playing
-        // The fade trigger handler will start the incoming player when fade begins
-        if (player1PlayingRef.current) {
-          safePlayerCall(player1Ref, 'playVideo');
-        }
-      }, 500);
+      player1Ref.current.loadVideoById(videoId);
+      // Also call playVideo in case loadVideoById doesn't auto-start
+      setTimeout(() => player1Ref.current?.playVideo(), 100);
+      player1CommandedPlayingRef.current = true;
     } catch (e) {
-      console.log('Player 1 loadVideo error:', e);
-      player1LoadingRef.current = false;
+      console.log('[Video Load] Player 1 error:', e);
     }
   }, [player1Video?.youtube_id]);
 
-  // Load video via API when video changes (no re-render needed)
-  // Load immediately - don't skip during fades (skipping causes wrong video to be visible)
+  // Load video via API when video changes
   useEffect(() => {
-    if (!player2Ref.current || !player2Video?.youtube_id) return;
+    const videoId = player2Video?.youtube_id;
+    if (!videoId) return;
 
-    const loadedVideoId = player2LoadedVideoIdRef.current;
-    if (loadedVideoId === player2Video.youtube_id) return;
+    // Check if already loaded
+    if (player2LoadedVideoIdRef.current === videoId) return;
 
-    player2LoadedVideoIdRef.current = player2Video.youtube_id;
-    player2LoadingRef.current = true;
-    player2CommandedPlayingRef.current = false; // Reset - new video is cued, not playing
+    // Wait for player to be ready
+    if (!player2Ref.current) {
+      console.log(`[Video Load] Player 2: waiting for player ref (videoId=${videoId})`);
+      return;
+    }
+
+    console.log(`[Video Load] Player 2: loading ${videoId}`);
+    player2LoadedVideoIdRef.current = videoId;
+
     try {
-      console.log(`[YT API] Player 2.cueVideoById(${player2Video.youtube_id})`);
-      player2Ref.current.cueVideoById(player2Video.youtube_id);
-      setTimeout(() => {
-        player2LoadingRef.current = false;
-        // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
-        if (!isMutedRef.current) {
-          safePlayerCall(player2Ref, 'unMute');
-        }
-        // Only start playback if DJ says this player should be playing
-        // The fade trigger handler will start the incoming player when fade begins
-        if (player2PlayingRef.current) {
-          safePlayerCall(player2Ref, 'playVideo');
-        }
-      }, 500);
+      player2Ref.current.loadVideoById(videoId);
+      // Also call playVideo in case loadVideoById doesn't auto-start
+      setTimeout(() => player2Ref.current?.playVideo(), 100);
+      player2CommandedPlayingRef.current = true;
     } catch (e) {
-      console.log('Player 2 loadVideo error:', e);
-      player2LoadingRef.current = false;
+      console.log('[Video Load] Player 2 error:', e);
     }
   }, [player2Video?.youtube_id]);
-
-  // Playback control removed - handled by poll sync and fade trigger
-  // The interval-based control was causing too many API calls and potential spinner issues
 
   const opts = {
     width: '100%',
     height: '100%',
     host: 'https://www.youtube-nocookie.com',
     playerVars: {
-      autoplay: 0,  // Don't auto-start - we control playback in onReady based on server state
+      autoplay: 0,  // Don't auto-start - we control playback after receiving server state
       controls: 0,
       disablekb: 1,  // Disable keyboard controls
       fs: 0,  // Disable fullscreen button
@@ -709,97 +661,83 @@ export default function BroadcastViewer() {
     hasReceivedStateRef.current = hasReceivedState;
   }, [hasReceivedState]);
 
-  const onPlayer1Ready = (event) => {
-    // Always update the ref (player object may change after loadVideoById)
-    player1Ref.current = event.target;
+  // Track if initial playback has been started (only do this once)
+  const initialPlaybackStartedRef = useRef(false);
 
-    // Skip initialization if already done (loadVideoById can trigger onReady again)
-    if (player1InitializedRef.current) {
-      console.log('Player 1 onReady (already initialized)');
-      player1LoadingRef.current = false; // Video is ready, allow time sync
-      // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
-      if (!isMutedRef.current) {
-        safePlayerCall(player1Ref, 'unMute');
-      }
-      return;
-    }
-    player1InitializedRef.current = true;
+  // Initialize playback ONCE after we have server state - this is the single source of truth
+  useEffect(() => {
+    if (!hasReceivedState || initialPlaybackStartedRef.current) return;
 
-    // Wait for server state before deciding to play
-    const initializePlayer = () => {
-      if (!hasReceivedStateRef.current) {
-        console.log('Player 1 ready, waiting for server state...');
-        setTimeout(initializePlayer, 200);
+    // Wait a bit for players to be ready
+    const tryInitialize = () => {
+      const player1Ready = player1Ref.current && player1InitializedRef.current;
+      const player2Ready = player2Ref.current && player2InitializedRef.current;
+
+      // Need at least one player ready
+      if (!player1Ready && !player2Ready) {
+        console.log('Waiting for players to be ready...');
+        setTimeout(tryInitialize, 200);
         return;
       }
 
-      // Only start if this is the active player (crossfade < 50)
-      const isActive = crossfadeRef.current < 50;
-      console.log('Player 1 initializing, crossfade:', crossfadeRef.current, 'isActive:', isActive);
+      // Determine active player based on crossfade
+      const player1IsActive = crossfadeRef.current < 50;
+      console.log('Initial playback setup - crossfade:', crossfadeRef.current, 'player1IsActive:', player1IsActive);
 
-      if (isActive) {
-        // Start playing muted (autoplay allowed when muted)
+      // Start only the active player
+      if (player1IsActive && player1Ready) {
+        console.log('Starting Player 1 (active)');
         safePlayerCall(player1Ref, 'playVideo');
-      } else {
-        // Seek to 0 and pause - ready to play when fade starts
-        console.log('Player 1 not active, pausing at 0');
-        safePlayerCall(player1Ref, 'pauseVideo');
-        safePlayerCall(player1Ref, 'seekTo', 0, true);
+      } else if (!player1IsActive && player2Ready) {
+        console.log('Starting Player 2 (active)');
+        safePlayerCall(player2Ref, 'playVideo');
       }
+
+      initialPlaybackStartedRef.current = true;
     };
 
-    initializePlayer();
+    tryInitialize();
+  }, [hasReceivedState]);
+
+  const onPlayer1Ready = (event) => {
+    console.log('Player 1 onReady');
+    player1Ref.current = event.target;
+    player1InitializedRef.current = true;
+
+    // If there's a video waiting to be loaded, load it now
+    const videoId = player1Video?.youtube_id;
+    if (videoId && player1LoadedVideoIdRef.current !== videoId) {
+      console.log(`[onReady] Player 1: loading ${videoId}`);
+      player1LoadedVideoIdRef.current = videoId;
+      event.target.loadVideoById(videoId);
+      setTimeout(() => player1Ref.current?.playVideo(), 100);
+      player1CommandedPlayingRef.current = true;
+    }
   };
 
   const onPlayer2Ready = (event) => {
-    // Always update the ref (player object may change after loadVideoById)
+    console.log('Player 2 onReady');
     player2Ref.current = event.target;
-
-    // Skip initialization if already done (loadVideoById can trigger onReady again)
-    if (player2InitializedRef.current) {
-      console.log('Player 2 onReady (already initialized)');
-      player2LoadingRef.current = false; // Video is ready, allow time sync
-      // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
-      if (!isMutedRef.current) {
-        safePlayerCall(player2Ref, 'unMute');
-      }
-      return;
-    }
     player2InitializedRef.current = true;
 
-    // Wait for server state before deciding to play
-    const initializePlayer = () => {
-      if (!hasReceivedStateRef.current) {
-        console.log('Player 2 ready, waiting for server state...');
-        setTimeout(initializePlayer, 200);
-        return;
-      }
-
-      // Only start if this is the active player (crossfade >= 50)
-      const isActive = crossfadeRef.current >= 50;
-      console.log('Player 2 initializing, crossfade:', crossfadeRef.current, 'isActive:', isActive);
-
-      if (isActive) {
-        // Start playing muted (autoplay allowed when muted)
-        safePlayerCall(player2Ref, 'playVideo');
-      } else {
-        // Seek to 0 and pause - ready to play when fade starts
-        console.log('Player 2 not active, pausing at 0');
-        safePlayerCall(player2Ref, 'pauseVideo');
-        safePlayerCall(player2Ref, 'seekTo', 0, true);
-      }
-    };
-
-    initializePlayer();
+    // If there's a video waiting to be loaded, load it now
+    const videoId = player2Video?.youtube_id;
+    if (videoId && player2LoadedVideoIdRef.current !== videoId) {
+      console.log(`[onReady] Player 2: loading ${videoId}`);
+      player2LoadedVideoIdRef.current = videoId;
+      event.target.loadVideoById(videoId);
+      setTimeout(() => player2Ref.current?.playVideo(), 100);
+      player2CommandedPlayingRef.current = true;
+    }
   };
 
   // Handle unmute button click
   const handleUnmute = () => {
     console.log('User clicked unmute, crossfadeRef:', crossfadeRef.current, 'animatedCrossfade:', animatedCrossfade);
     setIsMuted(false);
-    // Simple volume switch - active player gets 100, inactive gets 0
-    const vol1 = animatedCrossfade < 50 ? 100 : 0;
-    const vol2 = animatedCrossfade >= 50 ? 100 : 0;
+    // Gradual volume based on crossfade position
+    const vol1 = 100 - animatedCrossfade;
+    const vol2 = animatedCrossfade;
     console.log('Setting volumes: vol1=', vol1, 'vol2=', vol2);
     safePlayerCall(player1Ref, 'unMute');
     safePlayerCall(player1Ref, 'setVolume', vol1);
@@ -934,7 +872,7 @@ export default function BroadcastViewer() {
                 P1 - Vol: {100 - animatedCrossfade}%
               </div>
               {animatedCrossfade < 50 && (
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-green-500 text-white text-4xl font-bold px-8 py-4 rounded-xl shadow-2xl animate-pulse">
+                <div className="absolute top-2 right-2 z-50 bg-green-500 text-white text-sm font-bold px-3 py-1 rounded shadow-lg">
                   ACTIVE
                 </div>
               )}
@@ -971,7 +909,7 @@ export default function BroadcastViewer() {
                 P2 - Vol: {animatedCrossfade}%
               </div>
               {animatedCrossfade >= 50 && (
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-green-500 text-white text-4xl font-bold px-8 py-4 rounded-xl shadow-2xl animate-pulse">
+                <div className="absolute top-2 right-2 z-50 bg-green-500 text-white text-sm font-bold px-3 py-1 rounded shadow-lg">
                   ACTIVE
                 </div>
               )}
@@ -1010,22 +948,20 @@ export default function BroadcastViewer() {
 
           {/* Player 1 */}
           <div className="col-span-2 text-yellow-400 font-bold border-b border-yellow-400/30 mt-2 mb-1">VIEWER PLAYER 1</div>
-          <div>DJ Playing: <span className={debugInfo.djPlayer1Playing ? 'text-green-400 font-bold' : 'text-red-400'}>{String(debugInfo.djPlayer1Playing)}</span></div>
+          <div>YT State: <span className={debugInfo.player1YTState === 'playing' ? 'text-green-400 font-bold' : debugInfo.player1YTState === 'buffering' ? 'text-orange-400' : 'text-red-400'}>{debugInfo.player1YTState}</span></div>
           <div>Ready: <span className={debugInfo.player1Ready ? 'text-green-400' : 'text-red-400'}>{String(debugInfo.player1Ready)}</span></div>
           <div>Volume: <span className="text-yellow-400">{100 - animatedCrossfade}</span></div>
           <div>Opacity: <span className="text-yellow-400">{Math.round(100 - animatedCrossfade)}%</span></div>
-          <div>Local Playing: <span className={player1Playing ? 'text-green-400' : 'text-red-400'}>{String(player1Playing)}</span></div>
           <div>DJ Time: <span className="text-yellow-400">{debugInfo.djPlayer1Time}</span></div>
           <div>Viewer Time: <span className="text-yellow-400">{debugInfo.viewerPlayer1Time}</span> <span className={parseFloat(debugInfo.player1Diff) > 5 ? 'text-red-400 font-bold' : 'text-green-400'}>(diff: {debugInfo.player1Diff}s)</span></div>
           <div className="col-span-2">Title: <span className="text-yellow-300">{debugInfo.player1Title}</span></div>
 
           {/* Player 2 */}
           <div className="col-span-2 text-cyan-400 font-bold border-b border-cyan-400/30 mt-2 mb-1">VIEWER PLAYER 2</div>
-          <div>DJ Playing: <span className={debugInfo.djPlayer2Playing ? 'text-green-400 font-bold' : 'text-red-400'}>{String(debugInfo.djPlayer2Playing)}</span></div>
+          <div>YT State: <span className={debugInfo.player2YTState === 'playing' ? 'text-green-400 font-bold' : debugInfo.player2YTState === 'buffering' ? 'text-orange-400' : 'text-red-400'}>{debugInfo.player2YTState}</span></div>
           <div>Ready: <span className={debugInfo.player2Ready ? 'text-green-400' : 'text-red-400'}>{String(debugInfo.player2Ready)}</span></div>
           <div>Volume: <span className="text-cyan-400">{animatedCrossfade}</span></div>
           <div>Opacity: <span className="text-cyan-400">{animatedCrossfade}%</span></div>
-          <div>Local Playing: <span className={player2Playing ? 'text-green-400' : 'text-red-400'}>{String(player2Playing)}</span></div>
           <div>DJ Time: <span className="text-cyan-400">{debugInfo.djPlayer2Time}</span></div>
           <div>Viewer Time: <span className="text-cyan-400">{debugInfo.viewerPlayer2Time}</span> <span className={parseFloat(debugInfo.player2Diff) > 5 ? 'text-red-400 font-bold' : 'text-green-400'}>(diff: {debugInfo.player2Diff}s)</span></div>
           <div className="col-span-2">Title: <span className="text-cyan-300">{debugInfo.player2Title}</span></div>
