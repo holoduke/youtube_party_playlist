@@ -737,7 +737,7 @@ export default function BroadcastViewer() {
     height: '100%',
     host: 'https://www.youtube-nocookie.com',
     playerVars: {
-      autoplay: 1,  // Auto-start (muted to bypass browser restrictions)
+      autoplay: 0,  // Don't auto-start - we control playback in onReady based on server state
       controls: 0,
       disablekb: 1,  // Disable keyboard controls
       fs: 0,  // Disable fullscreen button
@@ -746,7 +746,7 @@ export default function BroadcastViewer() {
       showinfo: 0,
       iv_load_policy: 3,
       playsinline: 1,
-      mute: 1,  // Start muted to allow autoplay
+      mute: 1,  // Start muted to allow autoplay when we call playVideo()
     },
   };
 
