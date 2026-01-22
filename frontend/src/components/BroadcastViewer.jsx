@@ -765,18 +765,25 @@ export default function BroadcastViewer() {
       return;
     }
     player1InitializedRef.current = true;
-    console.log('Player 1 ready, djPlaying:', player1PlayingRef.current, 'crossfade:', crossfadeRef.current);
 
-    // Start playing muted (autoplay allowed when muted)
-    safePlayerCall(player1Ref, 'playVideo');
+    // Only start if this is the active player (crossfade < 50)
+    const isActive = crossfadeRef.current < 50;
+    console.log('Player 1 ready, djPlaying:', player1PlayingRef.current, 'crossfade:', crossfadeRef.current, 'isActive:', isActive);
 
-    // Keep trying to play for a few seconds (in case of timing issues)
-    for (let i = 1; i <= 3; i++) {
-      setTimeout(() => {
-        if (player1PlayingRef.current && !lastFadeTriggerRef.current) {
-          safePlayerCall(player1Ref, 'playVideo');
-        }
-      }, i * 1000);
+    if (isActive) {
+      // Start playing muted (autoplay allowed when muted)
+      safePlayerCall(player1Ref, 'playVideo');
+
+      // Keep trying to play for a few seconds (in case of timing issues)
+      for (let i = 1; i <= 3; i++) {
+        setTimeout(() => {
+          if (player1PlayingRef.current && !lastFadeTriggerRef.current && crossfadeRef.current < 50) {
+            safePlayerCall(player1Ref, 'playVideo');
+          }
+        }, i * 1000);
+      }
+    } else {
+      console.log('Player 1 not active, staying cued');
     }
   };
 
@@ -795,18 +802,25 @@ export default function BroadcastViewer() {
       return;
     }
     player2InitializedRef.current = true;
-    console.log('Player 2 ready, djPlaying:', player2PlayingRef.current, 'crossfade:', crossfadeRef.current);
 
-    // Start playing muted (autoplay allowed when muted)
-    safePlayerCall(player2Ref, 'playVideo');
+    // Only start if this is the active player (crossfade >= 50)
+    const isActive = crossfadeRef.current >= 50;
+    console.log('Player 2 ready, djPlaying:', player2PlayingRef.current, 'crossfade:', crossfadeRef.current, 'isActive:', isActive);
 
-    // Keep trying to play for a few seconds (in case of timing issues)
-    for (let i = 1; i <= 3; i++) {
-      setTimeout(() => {
-        if (player2PlayingRef.current) {
-          safePlayerCall(player2Ref, 'playVideo');
-        }
-      }, i * 1000);
+    if (isActive) {
+      // Start playing muted (autoplay allowed when muted)
+      safePlayerCall(player2Ref, 'playVideo');
+
+      // Keep trying to play for a few seconds (in case of timing issues)
+      for (let i = 1; i <= 3; i++) {
+        setTimeout(() => {
+          if (player2PlayingRef.current && crossfadeRef.current >= 50) {
+            safePlayerCall(player2Ref, 'playVideo');
+          }
+        }, i * 1000);
+      }
+    } else {
+      console.log('Player 2 not active, staying cued');
     }
   };
 
