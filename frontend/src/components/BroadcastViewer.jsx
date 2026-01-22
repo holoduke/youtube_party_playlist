@@ -218,6 +218,17 @@ export default function BroadcastViewer() {
           console.log('New fade trigger received:', serverFadeTrigger);
           lastFadeTriggerRef.current = serverFadeTrigger;
           setFadeTrigger(serverFadeTrigger);
+
+          // Start the incoming player immediately so it buffers during fade
+          // end_value = 100 means fading TO Player 2, end_value = 0 means fading TO Player 1
+          const incomingPlayerRef = serverFadeTrigger.end_value === 100 ? player2Ref : player1Ref;
+          const incomingPlayerNum = serverFadeTrigger.end_value === 100 ? 2 : 1;
+          try {
+            if (incomingPlayerRef.current) {
+              console.log(`[YT API] Fade start: Player ${incomingPlayerNum}.playVideo()`);
+              incomingPlayerRef.current.playVideo();
+            }
+          } catch { /* ignore */ }
         } else if (!serverFadeTrigger && lastFadeTriggerRef.current) {
           // Fade completed on DJ side
           lastFadeTriggerRef.current = null;
@@ -544,7 +555,6 @@ export default function BroadcastViewer() {
 
   // Load video via API when video changes (no re-render needed)
   // Load immediately - don't skip during fades (skipping causes wrong video to be visible)
-  // Always start playback after cue so video buffers while faded out (volume is 0, so silent)
   useEffect(() => {
     if (!player1Ref.current || !player1Video?.youtube_id) return;
 
@@ -562,9 +572,11 @@ export default function BroadcastViewer() {
         if (!isMutedRef.current) {
           safePlayerCall(player1Ref, 'unMute');
         }
-        // Always start playback so video buffers (volume controls audio, not playback state)
-        // This prevents spinner when fade brings player into view
-        safePlayerCall(player1Ref, 'playVideo');
+        // Only start playback if DJ says this player should be playing
+        // The fade trigger handler will start the incoming player when fade begins
+        if (player1PlayingRef.current) {
+          safePlayerCall(player1Ref, 'playVideo');
+        }
       }, 500);
     } catch (e) {
       console.log('Player 1 loadVideo error:', e);
@@ -574,7 +586,6 @@ export default function BroadcastViewer() {
 
   // Load video via API when video changes (no re-render needed)
   // Load immediately - don't skip during fades (skipping causes wrong video to be visible)
-  // Always start playback after cue so video buffers while faded out (volume is 0, so silent)
   useEffect(() => {
     if (!player2Ref.current || !player2Video?.youtube_id) return;
 
@@ -592,9 +603,11 @@ export default function BroadcastViewer() {
         if (!isMutedRef.current) {
           safePlayerCall(player2Ref, 'unMute');
         }
-        // Always start playback so video buffers (volume controls audio, not playback state)
-        // This prevents spinner when fade brings player into view
-        safePlayerCall(player2Ref, 'playVideo');
+        // Only start playback if DJ says this player should be playing
+        // The fade trigger handler will start the incoming player when fade begins
+        if (player2PlayingRef.current) {
+          safePlayerCall(player2Ref, 'playVideo');
+        }
       }, 500);
     } catch (e) {
       console.log('Player 2 loadVideo error:', e);
