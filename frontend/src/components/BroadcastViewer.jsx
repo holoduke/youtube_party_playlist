@@ -96,54 +96,8 @@ export default function BroadcastViewer() {
     isEndedRef.current = isEnded;
   }, [isEnded]);
 
-  // Handle visibility changes - try to keep playback going when hidden, resume when visible
-  useEffect(() => {
-    let keepAliveInterval = null;
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        // Tab going hidden - set up interval to keep trying to play
-        // This fights against browser throttling
-        if (!keepAliveInterval) {
-          keepAliveInterval = setInterval(() => {
-            const player1FadedOut = crossfadeRef.current >= 95;
-            const player2FadedOut = crossfadeRef.current <= 5;
-
-            if (player1PlayingRef.current && !player1FadedOut && player1Ref.current) {
-              try { player1Ref.current.playVideo(); } catch { /* ignore */ }
-            }
-            if (player2PlayingRef.current && !player2FadedOut && player2Ref.current) {
-              try { player2Ref.current.playVideo(); } catch { /* ignore */ }
-            }
-          }, 1000);
-        }
-      } else {
-        // Tab visible again - clear interval and immediately resume
-        if (keepAliveInterval) {
-          clearInterval(keepAliveInterval);
-          keepAliveInterval = null;
-        }
-
-        if (!isMutedRef.current) {
-          const player1FadedOut = crossfadeRef.current >= 95;
-          const player2FadedOut = crossfadeRef.current <= 5;
-
-          if (player1PlayingRef.current && !player1FadedOut && player1Ref.current) {
-            try { player1Ref.current.playVideo(); } catch { /* ignore */ }
-          }
-          if (player2PlayingRef.current && !player2FadedOut && player2Ref.current) {
-            try { player2Ref.current.playVideo(); } catch { /* ignore */ }
-          }
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (keepAliveInterval) clearInterval(keepAliveInterval);
-    };
-  }, []);
+  // No visibility change handling needed - YouTube iframe handles background playback fine
+  // The poll sync handles any state mismatches gracefully
 
   // Poll for channel broadcast state
   useEffect(() => {
@@ -625,9 +579,9 @@ export default function BroadcastViewer() {
         player1Ref.current.cueVideoById(player1Video.youtube_id);
         setTimeout(() => {
           player1LoadingRef.current = false;
+          // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
           if (!isMutedRef.current) {
             safePlayerCall(player1Ref, 'unMute');
-            safePlayerCall(player1Ref, 'setVolume', 100 - crossfadeRef.current);
           }
           if (player1PlayingRef.current) {
             safePlayerCall(player1Ref, 'playVideo');
@@ -674,9 +628,9 @@ export default function BroadcastViewer() {
         player2Ref.current.cueVideoById(player2Video.youtube_id);
         setTimeout(() => {
           player2LoadingRef.current = false;
+          // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
           if (!isMutedRef.current) {
             safePlayerCall(player2Ref, 'unMute');
-            safePlayerCall(player2Ref, 'setVolume', crossfadeRef.current);
           }
           if (player2PlayingRef.current) {
             safePlayerCall(player2Ref, 'playVideo');
@@ -799,13 +753,6 @@ export default function BroadcastViewer() {
         console.log('Player 1 onReady: skipping API calls during fade');
         return;
       }
-      // Re-apply unmuted state and volume after video load (only when not fading)
-      if (!isMutedRef.current) {
-        const vol = 100 - crossfadeRef.current;
-        safePlayerCall(player1Ref, 'unMute');
-        safePlayerCall(player1Ref, 'setVolume', vol);
-        player1LastVolumeRef.current = vol;
-      }
       return;
     }
     player1InitializedRef.current = true;
@@ -836,13 +783,6 @@ export default function BroadcastViewer() {
       if (lastFadeTriggerRef.current) {
         console.log('Player 2 onReady: skipping API calls during fade');
         return;
-      }
-      // Re-apply unmuted state and volume after video load (only when not fading)
-      if (!isMutedRef.current) {
-        const vol = crossfadeRef.current;
-        safePlayerCall(player2Ref, 'unMute');
-        safePlayerCall(player2Ref, 'setVolume', vol);
-        player2LastVolumeRef.current = vol;
       }
       return;
     }
