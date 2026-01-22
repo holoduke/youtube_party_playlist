@@ -469,7 +469,10 @@ export default function BroadcastViewer() {
     }
 
     const { started_at, start_value, end_value, duration } = fadeTrigger;
-    console.log('Starting fade animation:', { start_value, end_value, duration });
+
+    // Determine which player is the incoming one (the one we're fading TO)
+    const incomingPlayerRef = end_value === 100 ? player2Ref : player1Ref;
+    const incomingPlayerNum = end_value === 100 ? 2 : 1;
 
     const animate = () => {
       const now = Date.now();
@@ -530,10 +533,45 @@ export default function BroadcastViewer() {
       }
     };
 
-    // Start animation
-    fadeAnimationRef.current = requestAnimationFrame(animate);
+    // Wait for incoming player to be playing before starting visual fade
+    // This prevents showing YouTube's buffering spinner
+    let waitAttempts = 0;
+    const maxWaitAttempts = 30; // Max 3 seconds (30 * 100ms)
+    let waitTimeoutId = null;
+    let cancelled = false;
+
+    const waitForPlayer = () => {
+      if (cancelled) return;
+      waitAttempts++;
+      try {
+        const state = incomingPlayerRef.current?.getPlayerState?.();
+        // State 1 = playing, 3 = buffering (also acceptable, video is loading)
+        if (state === 1 || state === 3 || waitAttempts >= maxWaitAttempts) {
+          if (waitAttempts >= maxWaitAttempts) {
+            console.log(`[Fade] Player ${incomingPlayerNum} not ready after ${waitAttempts * 100}ms, starting anyway`);
+          } else {
+            console.log(`[Fade] Player ${incomingPlayerNum} ready (state=${state}), starting animation`);
+          }
+          console.log('Starting fade animation:', { start_value, end_value, duration });
+          fadeAnimationRef.current = requestAnimationFrame(animate);
+        } else {
+          // Not ready yet, check again
+          waitTimeoutId = setTimeout(waitForPlayer, 100);
+        }
+      } catch {
+        // Player error, start animation anyway
+        console.log('Starting fade animation:', { start_value, end_value, duration });
+        fadeAnimationRef.current = requestAnimationFrame(animate);
+      }
+    };
+
+    waitForPlayer();
 
     return () => {
+      cancelled = true;
+      if (waitTimeoutId) {
+        clearTimeout(waitTimeoutId);
+      }
       if (fadeAnimationRef.current) {
         cancelAnimationFrame(fadeAnimationRef.current);
       }
