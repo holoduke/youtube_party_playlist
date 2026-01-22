@@ -545,17 +545,19 @@ export default function BroadcastViewer() {
       waitAttempts++;
       try {
         const state = incomingPlayerRef.current?.getPlayerState?.();
-        // State 1 = playing, 3 = buffering (also acceptable, video is loading)
-        if (state === 1 || state === 3 || waitAttempts >= maxWaitAttempts) {
+        // Only accept state 1 (playing) - state 3 (buffering) still shows spinner
+        // States: -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
+        if (state === 1 || waitAttempts >= maxWaitAttempts) {
           if (waitAttempts >= maxWaitAttempts) {
-            console.log(`[Fade] Player ${incomingPlayerNum} not ready after ${waitAttempts * 100}ms, starting anyway`);
+            console.log(`[Fade] Player ${incomingPlayerNum} not ready after ${waitAttempts * 100}ms (state=${state}), starting anyway`);
           } else {
-            console.log(`[Fade] Player ${incomingPlayerNum} ready (state=${state}), starting animation`);
+            console.log(`[Fade] Player ${incomingPlayerNum} playing (state=${state}), starting animation`);
           }
           console.log('Starting fade animation:', { start_value, end_value, duration });
           fadeAnimationRef.current = requestAnimationFrame(animate);
         } else {
-          // Not ready yet, check again
+          // Not playing yet, check again
+          console.log(`[Fade] Player ${incomingPlayerNum} waiting (state=${state}, attempt ${waitAttempts})`);
           waitTimeoutId = setTimeout(waitForPlayer, 100);
         }
       } catch {
