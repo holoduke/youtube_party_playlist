@@ -1595,6 +1595,75 @@ function App() {
     ? (activeVideoIndex + 1 < autoPlayVideos.length ? autoPlayVideos[activeVideoIndex + 1] : null)
     : (autoPlayVideos.length > 0 ? autoPlayVideos[0] : null);
 
+  // Media Session API for Android notification controls
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+
+    // Update metadata when active video changes
+    if (activeVideo && !isStopped) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: activeVideo.title || 'Unknown Track',
+        artist: activeVideo.channel || selectedPlaylist?.name || 'Barmania',
+        album: selectedPlaylist?.name || 'Barmania',
+        artwork: activeVideo.thumbnail_url ? [
+          { src: activeVideo.thumbnail_url, sizes: '120x90', type: 'image/jpeg' },
+          { src: activeVideo.thumbnail_url.replace('default.jpg', 'hqdefault.jpg'), sizes: '480x360', type: 'image/jpeg' },
+        ] : [],
+      });
+    } else {
+      navigator.mediaSession.metadata = null;
+    }
+  }, [activeVideo?.id, activeVideo?.title, activeVideo?.thumbnail_url, selectedPlaylist?.name, isStopped]);
+
+  // Update playback state
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+
+    const isPlaying = activePlayerState.playing && !isStopped;
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+  }, [activePlayerState.playing, isStopped]);
+
+  // Set up action handlers (only once on mount, use refs to avoid stale closures)
+  const skipToNextRef = useRef(skipToNextWithFade);
+  skipToNextRef.current = skipToNextWithFade;
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+
+    const handlePlay = () => {
+      setIsStopped(false);
+      const playerRef = crossfadeValue < 50 ? player1Ref : player2Ref;
+      playerRef.current?.play?.();
+    };
+
+    const handlePause = () => {
+      const playerRef = crossfadeValue < 50 ? player1Ref : player2Ref;
+      playerRef.current?.pause?.();
+    };
+
+    const handleNextTrack = () => {
+      skipToNextRef.current?.();
+    };
+
+    try {
+      navigator.mediaSession.setActionHandler('play', handlePlay);
+      navigator.mediaSession.setActionHandler('pause', handlePause);
+      navigator.mediaSession.setActionHandler('nexttrack', handleNextTrack);
+    } catch {
+      // Some handlers may not be supported
+    }
+
+    return () => {
+      try {
+        navigator.mediaSession.setActionHandler('play', null);
+        navigator.mediaSession.setActionHandler('pause', null);
+        navigator.mediaSession.setActionHandler('nexttrack', null);
+      } catch {
+        // Ignore cleanup errors
+      }
+    };
+  }, [crossfadeValue]);
+
   // Calculate remaining playlist time, count, and total time
   const playlistRemainingInfo = (() => {
     // Total playlist duration (all videos)
