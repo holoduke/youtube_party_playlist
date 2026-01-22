@@ -16,6 +16,8 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
   const [initialVideoId, setInitialVideoId] = useState(null);
   // Track autoStart value for when player becomes ready
   const autoStartRef = useRef(autoStart);
+  // Track previous autoStart to detect changes from false to true
+  const prevAutoStartRef = useRef(autoStart);
 
   // Keep ref updated until player is ready (to catch late state updates)
   useEffect(() => {
@@ -209,15 +211,17 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       loadVideoInternal(newVideoId, autoStart);
     }
 
-    // If player is ready, same video is already loaded, autoStart is true, but not playing - play it
+    // If player is ready, same video is already loaded, and autoStart just changed from false to true - play it
     // This handles the case where a restored video is clicked to play explicitly
-    if (isPlayerReady && newVideoId && newVideoId === loadedVideoIdRef.current && autoStart && !isPlaying && playerRef.current) {
+    const autoStartJustEnabled = autoStart && !prevAutoStartRef.current;
+    if (isPlayerReady && newVideoId && newVideoId === loadedVideoIdRef.current && autoStartJustEnabled && playerRef.current) {
       try {
         playerRef.current.playVideo();
       } catch {
         // Player might be in an invalid state
       }
     }
+    prevAutoStartRef.current = autoStart;
 
     // If video was removed, reset state
     if (!newVideoId) {
@@ -227,7 +231,7 @@ const VideoPlayer = forwardRef(({ video, volume, playerNumber, isActive, onTimeU
       setIsPlaying(false);
       stopTimeTracking();
     }
-  }, [video?.youtube_id, isPlayerReady, autoStart, loadVideoInternal, stopTimeTracking, initialVideoId, isPlaying]);
+  }, [video?.youtube_id, isPlayerReady, autoStart, loadVideoInternal, stopTimeTracking, initialVideoId]);
 
   // Stable opts - never changes after mount (autoplay disabled, we control via API)
   const opts = useMemo(() => ({
