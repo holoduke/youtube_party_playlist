@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import YouTube from 'react-youtube';
 import { getChannelState, pingViewerPresence, leaveChannel } from '../services/api';
@@ -17,7 +17,7 @@ export default function BroadcastViewer() {
   const { hash } = useParams();
   const [searchParams] = useSearchParams();
   const showDebug = searchParams.get('debug') === '1';
-  const [playlistName, setPlaylistName] = useState('');
+  const [, setPlaylistName] = useState('');
   const [player1Video, setPlayer1Video] = useState(null);
   const [player2Video, setPlayer2Video] = useState(null);
   const [player1Playing, setPlayer1Playing] = useState(false);
@@ -30,7 +30,7 @@ export default function BroadcastViewer() {
   const [isMuted, setIsMuted] = useState(true); // Start muted for autoplay
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasReceivedState, setHasReceivedState] = useState(false);
-  const [startedAt, setStartedAt] = useState(null);
+  const [, setStartedAt] = useState(null);
   const [fadeTrigger, setFadeTrigger] = useState(null);
   // Stable initial video IDs - set once when first video is received, never changes
   // This prevents YouTube component from re-initializing when videos change
@@ -110,10 +110,10 @@ export default function BroadcastViewer() {
             const player2FadedOut = crossfadeRef.current <= 5;
 
             if (player1PlayingRef.current && !player1FadedOut && player1Ref.current) {
-              try { player1Ref.current.playVideo(); } catch (e) {}
+              try { player1Ref.current.playVideo(); } catch { /* ignore */ }
             }
             if (player2PlayingRef.current && !player2FadedOut && player2Ref.current) {
-              try { player2Ref.current.playVideo(); } catch (e) {}
+              try { player2Ref.current.playVideo(); } catch { /* ignore */ }
             }
           }, 1000);
         }
@@ -129,10 +129,10 @@ export default function BroadcastViewer() {
           const player2FadedOut = crossfadeRef.current <= 5;
 
           if (player1PlayingRef.current && !player1FadedOut && player1Ref.current) {
-            try { player1Ref.current.playVideo(); } catch (e) {}
+            try { player1Ref.current.playVideo(); } catch { /* ignore */ }
           }
           if (player2PlayingRef.current && !player2FadedOut && player2Ref.current) {
-            try { player2Ref.current.playVideo(); } catch (e) {}
+            try { player2Ref.current.playVideo(); } catch { /* ignore */ }
           }
         }
       }
@@ -287,7 +287,7 @@ export default function BroadcastViewer() {
           if (player2Ref.current && typeof player2Ref.current.getCurrentTime === 'function') {
             viewerPlayer2Time = player2Ref.current.getCurrentTime() || 0;
           }
-        } catch (e) {}
+        } catch { /* ignore */ }
 
         // Sync playback time (use higher threshold to avoid constant seeking)
         const SYNC_THRESHOLD = 20;
@@ -307,7 +307,7 @@ export default function BroadcastViewer() {
               playerRef.current.seekTo(time, true);
               lastSeekTimeRef.current[playerNum] = now;
             }
-          } catch (e) {
+          } catch {
             // Player iframe was destroyed, ignore
           }
         };
@@ -319,7 +319,7 @@ export default function BroadcastViewer() {
               console.log(`[YT API] Time sync: Player ${playerNum}.pauseVideo()`);
               playerRef.current.pauseVideo();
             }
-          } catch (e) {
+          } catch {
             // Player iframe was destroyed, ignore
           }
         };
@@ -477,7 +477,7 @@ export default function BroadcastViewer() {
           playerRef.current.setVolume(newVolume);
           lastVolumeRef.current = newVolume;
         }
-      } catch (e) {}
+      } catch { /* ignore */ }
     }
   };
 
@@ -545,7 +545,7 @@ export default function BroadcastViewer() {
               player1Ref.current.setVolume(vol1);
               player1LastVolumeRef.current = vol1;
             }
-          } catch (e) {}
+          } catch { /* ignore */ }
         }
         if (shouldUpdateVol2) {
           try {
@@ -554,7 +554,7 @@ export default function BroadcastViewer() {
               player2Ref.current.setVolume(vol2);
               player2LastVolumeRef.current = vol2;
             }
-          } catch (e) {}
+          } catch { /* ignore */ }
         }
       }
 
@@ -578,6 +578,19 @@ export default function BroadcastViewer() {
       }
     };
   }, [fadeTrigger]);
+
+  // Logged wrapper for all YouTube API calls - helps debug excessive calls
+  const safePlayerCall = (playerRef, method, ...args) => {
+    const playerNum = playerRef === player1Ref ? 1 : 2;
+    try {
+      if (playerRef.current && typeof playerRef.current[method] === 'function') {
+        console.log(`[YT API] Player ${playerNum}.${method}(${args.join(', ')})`);
+        playerRef.current[method](...args);
+      }
+    } catch {
+      // Ignore API errors
+    }
+  };
 
   // Load video via API when video changes (no re-render needed)
   // Skip during fades, delay after fades to avoid spinner
@@ -708,7 +721,7 @@ export default function BroadcastViewer() {
             player1Ref.current.pauseVideo();
           }
         }
-      } catch (e) {
+      } catch {
         player1Ref.current = null;
       }
     };
@@ -745,7 +758,7 @@ export default function BroadcastViewer() {
             player2Ref.current.pauseVideo();
           }
         }
-      } catch (e) {
+      } catch {
         player2Ref.current = null;
       }
     };
@@ -771,19 +784,6 @@ export default function BroadcastViewer() {
       playsinline: 1,
       mute: 1,  // Start muted to allow autoplay
     },
-  };
-
-  // Logged wrapper for all YouTube API calls - helps debug excessive calls
-  const safePlayerCall = (playerRef, method, ...args) => {
-    const playerNum = playerRef === player1Ref ? 1 : 2;
-    try {
-      if (playerRef.current && typeof playerRef.current[method] === 'function') {
-        console.log(`[YT API] Player ${playerNum}.${method}(${args.join(', ')})`);
-        playerRef.current[method](...args);
-      }
-    } catch (e) {
-      console.log(`[YT API] Player ${playerNum}.${method}() ERROR:`, e.message);
-    }
   };
 
   const onPlayer1Ready = (event) => {

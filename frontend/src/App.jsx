@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getCategories, getVideos, getPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, updatePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, getChannel, startChannelBroadcast, stopChannelBroadcast, syncChannelState, getViewerCount } from './services/api';
+import { getCategories, getVideos, getPlaylists, getPlaylist, addVideoToPlaylist, removeVideoFromPlaylist, reorderPlaylistVideos, updatePlaylist, searchYouTube, getYouTubeVideo, importYouTubeVideo, extractYouTubeVideoId, getChannel, stopChannelBroadcast, syncChannelState, getViewerCount } from './services/api';
 import { initEcho, broadcastState } from './services/playerSync';
 import { useUser } from './contexts/UserContext';
 import CategoryFilter from './components/CategoryFilter';
@@ -11,6 +11,7 @@ import Crossfader from './components/Crossfader';
 import UserSelector from './components/UserSelector';
 import BroadcastModal from './components/BroadcastModal';
 import AccountSettings from './components/AccountSettings';
+import IdeasModal from './components/IdeasModal';
 import PlaylistSettingsModal from './components/PlaylistSettingsModal';
 import PartyModal from './components/PartyModal';
 import PublishModal from './components/PublishModal';
@@ -35,7 +36,7 @@ const getYouTubeErrorMessage = (code) => (
 function App() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser, logout, updateUser } = useUser();
+  const { currentUser, updateUser } = useUser();
   const [categories, setCategories] = useState([]);
   const [videos, setVideos] = useState([]);
   const [playlists, setPlaylists] = useState([]);
@@ -80,11 +81,6 @@ function App() {
   // Party mode modal state
   const [showPartyModal, setShowPartyModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
-  const [partyPlaylistSearch, setPartyPlaylistSearch] = useState('');
-  const [partySelectedPlaylist, setPartySelectedPlaylist] = useState(null);
-  const [partyDropdownOpen, setPartyDropdownOpen] = useState(false);
-  const [partyLiveResult, setPartyLiveResult] = useState(null);
-  const [partyLoading, setPartyLoading] = useState(false);
 
   // Channel state (user's broadcast channel)
   const [channel, setChannel] = useState(null);
@@ -114,19 +110,14 @@ function App() {
   // Account settings modal state
   const [showAccountSettings, setShowAccountSettings] = useState(false);
 
+  // Ideas modal state
+  const [showIdeasModal, setShowIdeasModal] = useState(false);
+
   // Playlist settings modal state
   const [showPlaylistSettings, setShowPlaylistSettings] = useState(false);
 
   // Playlist modal state
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  const [playlistModalTab, setPlaylistModalTab] = useState('my'); // 'my' | 'public' | 'create' | 'import'
-  const [publicPlaylistSearch, setPublicPlaylistSearch] = useState('');
-  const [publicPlaylists, setPublicPlaylists] = useState([]);
-  const [publicPlaylistsLoading, setPublicPlaylistsLoading] = useState(false);
-  const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [newPlaylistPublic, setNewPlaylistPublic] = useState(false);
-  const [creatingPlaylist, setCreatingPlaylist] = useState(false);
-  const publicSearchTimeoutRef = useRef(null);
 
   // YouTube search state
   const [youtubeSearchQuery, setYoutubeSearchQuery] = useState('');
@@ -138,9 +129,6 @@ function App() {
 
   // Add video modal state
   const [addVideoModal, setAddVideoModal] = useState(null); // null or video object
-
-  // Playlist item menu state
-  const [playlistMenuOpen, setPlaylistMenuOpen] = useState(null); // playlist id or null
 
   // Inline playlist name editing
   const [editingPlaylistName, setEditingPlaylistName] = useState(false);
@@ -265,55 +253,6 @@ function App() {
       window.removeEventListener('focus', checkClipboard);
     };
   }, []);
-
-  // Get the live session URL
-  const getLiveUrl = (shareCode) => {
-    const host = window.location.hostname;
-    const port = window.location.port;
-    const protocol = window.location.protocol;
-    return `${protocol}//${host}${port ? ':' + port : ''}/live/${shareCode}`;
-  };
-
-  // Handle Go Live from party modal
-  const handlePartyGoLive = async () => {
-    if (!partySelectedPlaylist) return;
-    setPartyLoading(true);
-    try {
-      const result = await goLivePlaylist(partySelectedPlaylist.id);
-      setPartyLiveResult(result);
-    } catch (error) {
-      console.error('Failed to go live:', error);
-      showNotification('Failed to start live session', 'error');
-    }
-    setPartyLoading(false);
-  };
-
-  // Handle opening the live session as host
-  const handleOpenAsHost = () => {
-    if (partyLiveResult) {
-      navigate(`/live/${partyLiveResult.share_code}?host=${partyLiveResult.host_code}`);
-    }
-  };
-
-  // Reset party modal state
-  const resetPartyModal = () => {
-    setPartyPlaylistSearch('');
-    setPartySelectedPlaylist(null);
-    setPartyDropdownOpen(false);
-    setPartyLiveResult(null);
-    setPartyLoading(false);
-  };
-
-  // Close party modal
-  const closePartyModal = () => {
-    setShowPartyModal(false);
-    resetPartyModal();
-  };
-
-  // Filter playlists for dropdown
-  const filteredPartyPlaylists = playlists.filter(p =>
-    p.name.toLowerCase().includes(partyPlaylistSearch.toLowerCase())
-  );
 
   // YouTube search handler with debounce and URL detection
   const handleYoutubeSearchInput = (value) => {
@@ -622,56 +561,6 @@ function App() {
     }
   };
 
-  const handleCreatePlaylist = async () => {
-    if (!newPlaylistName.trim() || !currentUser) return;
-    setCreatingPlaylist(true);
-    try {
-      const playlist = await createPlaylist({
-        name: newPlaylistName.trim(),
-        user_id: currentUser.id,
-        is_public: newPlaylistPublic,
-      });
-      showNotification(`Created playlist "${playlist.name}"`);
-      setNewPlaylistName('');
-      setNewPlaylistPublic(false);
-      setShowPlaylistModal(false);
-      loadPlaylists();
-      // Select the newly created playlist and switch to playlist view
-      handleSelectPlaylist(playlist.id, true);
-    } catch (error) {
-      console.error('Failed to create playlist:', error);
-      showNotification('Failed to create playlist', 'error');
-    }
-    setCreatingPlaylist(false);
-  };
-
-  // Search public playlists with debounce
-  const handlePublicPlaylistSearch = (value) => {
-    setPublicPlaylistSearch(value);
-    if (publicSearchTimeoutRef.current) {
-      clearTimeout(publicSearchTimeoutRef.current);
-    }
-    setPublicPlaylistsLoading(true);
-    publicSearchTimeoutRef.current = setTimeout(async () => {
-      try {
-        // Exclude current user's playlists from public results
-        const results = await getPublicPlaylists(value || null, currentUser?.id);
-        setPublicPlaylists(results);
-      } catch (error) {
-        console.error('Failed to search public playlists:', error);
-      }
-      setPublicPlaylistsLoading(false);
-    }, 300);
-  };
-
-  // Load public playlists when tab is selected
-  const handlePlaylistModalTabChange = (tab) => {
-    setPlaylistModalTab(tab);
-    if (tab === 'public' && publicPlaylists.length === 0) {
-      handlePublicPlaylistSearch('');
-    }
-  };
-
   // Start editing playlist name
   const startEditingPlaylistName = () => {
     if (viewingPlaylist) {
@@ -743,6 +632,7 @@ function App() {
   };
 
   // Queue a video to the playlist and fade to it
+  // eslint-disable-next-line no-unused-vars
   const handleQueueToPlaylist = async (video, playerNumber) => {
     // Must have a selected playlist to queue to
     if (!selectedPlaylist) {
@@ -934,50 +824,6 @@ function App() {
   const showNotification = (message, type = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
-  };
-
-  const handleLogout = () => {
-    // Stop and destroy player instances
-    if (player1Ref.current) {
-      player1Ref.current.destroy();
-    }
-    if (player2Ref.current) {
-      player2Ref.current.destroy();
-    }
-
-    // Clear all player state
-    setPlayer1Video(null);
-    setPlayer2Video(null);
-    setPlayer1State({ playing: false, currentTime: 0, duration: 0 });
-    setPlayer2State({ playing: false, currentTime: 0, duration: 0 });
-    setAutoPlayEnabled(false);
-    setIsAutoFading(false);
-    setActivePlaylist(null);
-    setPlaylistMode(false);
-    setSelectedPlaylist(null);
-    setViewingPlaylist(null);
-    setCrossfadeValue(50);
-
-    // Stop broadcasting if active
-    if (isBroadcasting && currentUser) {
-      stopChannelBroadcast(currentUser.id).catch(() => {});
-    }
-    setIsBroadcasting(false);
-    setBroadcastHash(null);
-    setBroadcastCode(null);
-
-    // Clear any running intervals
-    if (autoFadeIntervalRef.current) {
-      clearInterval(autoFadeIntervalRef.current);
-      autoFadeIntervalRef.current = null;
-    }
-
-    // Clear saved playback state and selected playlist
-    localStorage.removeItem('barmania_playback_state');
-    localStorage.removeItem('barmania_selected_playlist');
-
-    // Call the actual logout
-    logout();
   };
 
   const handleSelectPlaylist = useCallback(async (playlistId, switchToPlaylistView = false) => {
@@ -1744,6 +1590,11 @@ function App() {
         <AccountSettings onClose={() => setShowAccountSettings(false)} />
       )}
 
+      {/* Ideas Modal */}
+      {showIdeasModal && (
+        <IdeasModal currentUser={currentUser} onClose={() => setShowIdeasModal(false)} />
+      )}
+
       {/* Notification Toast */}
       {notification && (
         <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-lg shadow-lg transition-all ${
@@ -1860,6 +1711,19 @@ function App() {
 
             {/* Right side controls */}
             <div className="flex items-center gap-3">
+              {/* Ideas/Wishlist Button */}
+              {currentUser && (
+                <button
+                  onClick={() => setShowIdeasModal(true)}
+                  className="p-2 rounded-xl hover:bg-white/10 text-yellow-400/80 hover:text-yellow-400 transition-colors"
+                  title="Ideas & Wishes"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </button>
+              )}
+
               {/* Current User Display */}
               {currentUser && (
                 <button
@@ -1895,7 +1759,6 @@ function App() {
               <ChannelSection
                 currentUser={currentUser}
                 isBroadcasting={isBroadcasting}
-                broadcastCode={broadcastCode}
                 viewerCount={viewerCount}
                 selectedPlaylist={selectedPlaylist}
                 playlistRemainingInfo={playlistRemainingInfo}
@@ -2431,10 +2294,7 @@ function App() {
               ) : (
                 <VideoList
                   videos={displayVideos}
-                  onShowAddModal={(video) => {
-                    setAddVideoModal(video);
-                    setShowPlaylistSubmenu(false);
-                  }}
+                  onShowAddModal={(video) => setAddVideoModal(video)}
                 />
               )}
             </div>

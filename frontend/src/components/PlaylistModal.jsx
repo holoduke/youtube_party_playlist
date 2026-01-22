@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { getPublicPlaylists, createPlaylist, deletePlaylist, setDefaultPlaylist, getPlaylist } from '../services/api';
 import YouTubePlaylistImport from './YouTubePlaylistImport';
 
@@ -7,7 +7,6 @@ export default function PlaylistModal({
   onClose,
   playlists,
   selectedPlaylist,
-  viewingPlaylist,
   currentUser,
   onSelectPlaylist,
   onPlaylistCreated,
@@ -29,22 +28,22 @@ export default function PlaylistModal({
   const [publicPlaylistsLoading, setPublicPlaylistsLoading] = useState(false);
   const searchTimeoutRef = useRef(null);
 
-  useEffect(() => {
-    if (isOpen && tab === 'public') {
-      loadPublicPlaylists();
-    }
-  }, [isOpen, tab]);
-
-  const loadPublicPlaylists = async (search = '') => {
+  const loadPublicPlaylists = useCallback(async (search = '') => {
     setPublicPlaylistsLoading(true);
     try {
       const data = await getPublicPlaylists(search);
       setPublicPlaylists(data);
-    } catch (error) {
-      console.error('Failed to load public playlists:', error);
+    } catch {
+      // Failed to load public playlists
     }
     setPublicPlaylistsLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && tab === 'public') {
+      loadPublicPlaylists();
+    }
+  }, [isOpen, tab, loadPublicPlaylists]);
 
   const handlePublicPlaylistSearch = (value) => {
     setPublicPlaylistSearch(value);
@@ -92,7 +91,7 @@ export default function PlaylistModal({
         loadPlaylists();
         onPlaylistDeleted(playlist);
         showNotification(`Deleted "${playlist.name}"`);
-      } catch (error) {
+      } catch {
         showNotification('Failed to delete playlist', 'error');
       }
     }

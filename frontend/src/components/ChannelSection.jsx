@@ -4,7 +4,6 @@ import { stopChannelBroadcast, startChannelBroadcast } from '../services/api';
 export default function ChannelSection({
   currentUser,
   isBroadcasting,
-  broadcastCode,
   viewerCount,
   selectedPlaylist,
   playlistRemainingInfo,
@@ -34,7 +33,7 @@ export default function ChannelSection({
         onBroadcastStart(result);
         showNotification('Broadcast started');
       }
-    } catch (error) {
+    } catch {
       showNotification(isBroadcasting ? 'Failed to stop broadcast' : 'Failed to start broadcast', 'error');
     }
 

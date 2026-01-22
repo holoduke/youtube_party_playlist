@@ -400,4 +400,30 @@ export const getGoogleAuthStatus = async (userId) => {
   return response.data;
 };
 
+// ==================== Ideas/Wishlist API ====================
+
+// Get all ideas
+export const getIdeas = async (userId) => {
+  const response = await api.get('/ideas', { params: { user_id: userId } });
+  return response.data;
+};
+
+// Create a new idea
+export const createIdea = async (userId, content) => {
+  const response = await api.post('/ideas', { user_id: userId, content });
+  return response.data;
+};
+
+// Toggle idea done status (admin only)
+export const toggleIdeaDone = async (ideaId, userId) => {
+  const response = await api.put(`/ideas/${ideaId}/toggle-done`, { user_id: userId });
+  return response.data;
+};
+
+// Delete an idea
+export const deleteIdea = async (ideaId, userId) => {
+  const response = await api.delete(`/ideas/${ideaId}`, { params: { user_id: userId } });
+  return response.data;
+};
+
 export default api;

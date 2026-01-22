@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\YouTubeController;
 use App\Http\Controllers\Api\GoogleAuthController;
 use App\Http\Controllers\Api\YouTubePlaylistController;
 use App\Http\Controllers\Api\ChannelController;
+use App\Http\Controllers\Api\IdeaController;
 use Illuminate\Support\Facades\Route;
 
 // Authentication
@@ -86,3 +87,9 @@ Route::post('/channel/watch/{hash}/ping', [ChannelController::class, 'viewerPing
 Route::post('/channel/watch/{hash}/leave', [ChannelController::class, 'viewerLeave']);
 Route::get('/channel/code/{code}', [ChannelController::class, 'getByCode']);
 Route::get('/channels/live', [ChannelController::class, 'liveIndex']);
+
+// Ideas/Wishlist
+Route::get('/ideas', [IdeaController::class, 'index']);
+Route::post('/ideas', [IdeaController::class, 'store']);
+Route::put('/ideas/{idea}/toggle-done', [IdeaController::class, 'toggleDone']);
+Route::delete('/ideas/{idea}', [IdeaController::class, 'destroy']);
