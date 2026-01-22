@@ -750,6 +750,12 @@ export default function BroadcastViewer() {
     },
   };
 
+  // Track if we've received state (for onReady handlers to check)
+  const hasReceivedStateRef = useRef(false);
+  useEffect(() => {
+    hasReceivedStateRef.current = hasReceivedState;
+  }, [hasReceivedState]);
+
   const onPlayer1Ready = (event) => {
     // Always update the ref (player object may change after loadVideoById)
     player1Ref.current = event.target;
@@ -766,27 +772,29 @@ export default function BroadcastViewer() {
     }
     player1InitializedRef.current = true;
 
-    // Only start if this is the active player (crossfade < 50)
-    const isActive = crossfadeRef.current < 50;
-    console.log('Player 1 ready, djPlaying:', player1PlayingRef.current, 'crossfade:', crossfadeRef.current, 'isActive:', isActive);
-
-    if (isActive) {
-      // Start playing muted (autoplay allowed when muted)
-      safePlayerCall(player1Ref, 'playVideo');
-
-      // Keep trying to play for a few seconds (in case of timing issues)
-      for (let i = 1; i <= 3; i++) {
-        setTimeout(() => {
-          if (player1PlayingRef.current && !lastFadeTriggerRef.current && crossfadeRef.current < 50) {
-            safePlayerCall(player1Ref, 'playVideo');
-          }
-        }, i * 1000);
+    // Wait for server state before deciding to play
+    const initializePlayer = () => {
+      if (!hasReceivedStateRef.current) {
+        console.log('Player 1 ready, waiting for server state...');
+        setTimeout(initializePlayer, 200);
+        return;
       }
-    } else {
-      console.log('Player 1 not active, seeking to 0 and pausing');
-      safePlayerCall(player1Ref, 'seekTo', 0, true);
-      safePlayerCall(player1Ref, 'pauseVideo');
-    }
+
+      // Only start if this is the active player (crossfade < 50)
+      const isActive = crossfadeRef.current < 50;
+      console.log('Player 1 initializing, crossfade:', crossfadeRef.current, 'isActive:', isActive);
+
+      if (isActive) {
+        // Start playing muted (autoplay allowed when muted)
+        safePlayerCall(player1Ref, 'playVideo');
+      } else {
+        console.log('Player 1 not active, seeking to 0 and pausing');
+        safePlayerCall(player1Ref, 'seekTo', 0, true);
+        safePlayerCall(player1Ref, 'pauseVideo');
+      }
+    };
+
+    initializePlayer();
   };
 
   const onPlayer2Ready = (event) => {
@@ -805,27 +813,29 @@ export default function BroadcastViewer() {
     }
     player2InitializedRef.current = true;
 
-    // Only start if this is the active player (crossfade >= 50)
-    const isActive = crossfadeRef.current >= 50;
-    console.log('Player 2 ready, djPlaying:', player2PlayingRef.current, 'crossfade:', crossfadeRef.current, 'isActive:', isActive);
-
-    if (isActive) {
-      // Start playing muted (autoplay allowed when muted)
-      safePlayerCall(player2Ref, 'playVideo');
-
-      // Keep trying to play for a few seconds (in case of timing issues)
-      for (let i = 1; i <= 3; i++) {
-        setTimeout(() => {
-          if (player2PlayingRef.current && crossfadeRef.current >= 50) {
-            safePlayerCall(player2Ref, 'playVideo');
-          }
-        }, i * 1000);
+    // Wait for server state before deciding to play
+    const initializePlayer = () => {
+      if (!hasReceivedStateRef.current) {
+        console.log('Player 2 ready, waiting for server state...');
+        setTimeout(initializePlayer, 200);
+        return;
       }
-    } else {
-      console.log('Player 2 not active, seeking to 0 and pausing');
-      safePlayerCall(player2Ref, 'seekTo', 0, true);
-      safePlayerCall(player2Ref, 'pauseVideo');
-    }
+
+      // Only start if this is the active player (crossfade >= 50)
+      const isActive = crossfadeRef.current >= 50;
+      console.log('Player 2 initializing, crossfade:', crossfadeRef.current, 'isActive:', isActive);
+
+      if (isActive) {
+        // Start playing muted (autoplay allowed when muted)
+        safePlayerCall(player2Ref, 'playVideo');
+      } else {
+        console.log('Player 2 not active, seeking to 0 and pausing');
+        safePlayerCall(player2Ref, 'seekTo', 0, true);
+        safePlayerCall(player2Ref, 'pauseVideo');
+      }
+    };
+
+    initializePlayer();
   };
 
   // Handle unmute button click
