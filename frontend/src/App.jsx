@@ -1174,6 +1174,12 @@ function App() {
       return;
     }
 
+    // Skip during fades - the active player changes mid-fade which would cause wrong video to load
+    if (isAutoFading) {
+      console.log('[Playlist Sync] Skipped - fade in progress');
+      return;
+    }
+
     console.log(`[Playlist Sync] Effect triggered - selectedPlaylist: "${selectedPlaylist?.name || 'none'}", videos: ${autoPlayVideos.length}`);
 
     // If playlist has no videos, clear the inactive player
@@ -1253,7 +1259,7 @@ function App() {
         setPlayer1Video(null);
       }
     }
-  }, [autoPlayVideos, crossfadeValue, player1Video, player2Video]);
+  }, [autoPlayVideos, crossfadeValue, player1Video, player2Video, isAutoFading]);
 
   // Manual crossfade between the two players
   const skipToNextWithFade = useCallback(() => {
