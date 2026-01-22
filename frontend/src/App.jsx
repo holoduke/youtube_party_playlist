@@ -1703,12 +1703,30 @@ function App() {
 
       {/* Notification Toast */}
       {notification && (
-        <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-lg shadow-lg transition-all ${
-          notification.type === 'error'
-            ? 'bg-red-500 text-white'
-            : 'bg-green-500 text-white'
-        }`}>
-          {notification.message}
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200]">
+          <div
+            className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border transition-all duration-300 ${
+              notification.type === 'error'
+                ? 'bg-red-500/90 border-red-400/30 text-white shadow-red-500/25'
+                : 'bg-gradient-to-r from-purple-500/90 to-pink-500/90 border-purple-400/30 text-white shadow-purple-500/25'
+            }`}
+            style={{ animation: 'notificationSlide 0.3s ease-out' }}
+          >
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+              notification.type === 'error' ? 'bg-white/20' : 'bg-white/20'
+            }`}>
+              {notification.type === 'error' ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </div>
+            <span className="font-medium pr-2">{notification.message}</span>
+          </div>
         </div>
       )}
 

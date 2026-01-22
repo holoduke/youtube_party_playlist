@@ -27,3 +27,15 @@ body {
 #root {
   width: 100%;
 }
+
+/* Notification slide-in animation */
+@keyframes notificationSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
