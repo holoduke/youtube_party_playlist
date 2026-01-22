@@ -933,15 +933,26 @@ export default function BroadcastViewer() {
         </div>
       )}
 
-      {/* Dual video players - fullscreen overlapping, pointer-events disabled to prevent pause on click */}
-      <div className="absolute inset-0 pointer-events-none">
+      {/* Dual video players - side by side in debug mode, overlapping normally */}
+      <div className={`absolute inset-0 pointer-events-none ${showDebug ? 'flex' : ''}`}>
         {/* Player 1 - base layer (only render once we have initial video ID) */}
         <div
-          className="absolute inset-0 z-10"
-          style={{ opacity: Math.max(0.01, (100 - animatedCrossfade) / 100) }}
+          className={showDebug
+            ? "relative w-1/2 h-full border-2 border-yellow-500"
+            : "absolute inset-0 z-10"
+          }
+          style={showDebug ? {} : { opacity: Math.max(0.01, (100 - animatedCrossfade) / 100) }}
         >
+          {showDebug && (
+            <div className="absolute top-2 left-2 z-50 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded">
+              P1 - Vol: {100 - animatedCrossfade}%
+            </div>
+          )}
           {initialPlayer1VideoId && (
-            <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
+            <div className={showDebug
+              ? "w-full h-full [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full"
+              : "absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full"
+            }>
               <YouTube
                 key="player1"
                 videoId={initialPlayer1VideoId}
@@ -956,11 +967,22 @@ export default function BroadcastViewer() {
 
         {/* Player 2 - overlay layer, opacity controlled by crossfade (only render once we have initial video ID) */}
         <div
-          className="absolute inset-0 z-20"
-          style={{ opacity: Math.max(0.01, animatedCrossfade / 100) }}
+          className={showDebug
+            ? "relative w-1/2 h-full border-2 border-cyan-500"
+            : "absolute inset-0 z-20"
+          }
+          style={showDebug ? {} : { opacity: Math.max(0.01, animatedCrossfade / 100) }}
         >
+          {showDebug && (
+            <div className="absolute top-2 left-2 z-50 bg-cyan-500 text-black text-xs font-bold px-2 py-1 rounded">
+              P2 - Vol: {animatedCrossfade}%
+            </div>
+          )}
           {initialPlayer2VideoId && (
-            <div className="absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full">
+            <div className={showDebug
+              ? "w-full h-full [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full"
+              : "absolute inset-0 [&>div]:!w-full [&>div]:!h-full [&_iframe]:!w-full [&_iframe]:!h-full"
+            }>
               <YouTube
                 key="player2"
                 videoId={initialPlayer2VideoId}
