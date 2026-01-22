@@ -783,7 +783,9 @@ export default function BroadcastViewer() {
         }, i * 1000);
       }
     } else {
-      console.log('Player 1 not active, staying cued');
+      console.log('Player 1 not active, seeking to 0 and pausing');
+      safePlayerCall(player1Ref, 'seekTo', 0, true);
+      safePlayerCall(player1Ref, 'pauseVideo');
     }
   };
 
@@ -820,7 +822,9 @@ export default function BroadcastViewer() {
         }, i * 1000);
       }
     } else {
-      console.log('Player 2 not active, staying cued');
+      console.log('Player 2 not active, seeking to 0 and pausing');
+      safePlayerCall(player2Ref, 'seekTo', 0, true);
+      safePlayerCall(player2Ref, 'pauseVideo');
     }
   };
 
