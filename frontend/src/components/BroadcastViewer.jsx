@@ -788,13 +788,10 @@ export default function BroadcastViewer() {
         // Start playing muted (autoplay allowed when muted)
         safePlayerCall(player1Ref, 'playVideo');
       } else {
-        // Pre-buffer: play briefly to load video data, then pause at 0
-        console.log('Player 1 not active, pre-buffering then pausing at 0');
-        safePlayerCall(player1Ref, 'playVideo');
-        setTimeout(() => {
-          safePlayerCall(player1Ref, 'pauseVideo');
-          safePlayerCall(player1Ref, 'seekTo', 0, true);
-        }, 1000);
+        // Seek to 0 and pause - ready to play when fade starts
+        console.log('Player 1 not active, pausing at 0');
+        safePlayerCall(player1Ref, 'pauseVideo');
+        safePlayerCall(player1Ref, 'seekTo', 0, true);
       }
     };
 
@@ -833,13 +830,10 @@ export default function BroadcastViewer() {
         // Start playing muted (autoplay allowed when muted)
         safePlayerCall(player2Ref, 'playVideo');
       } else {
-        // Pre-buffer: play briefly to load video data, then pause at 0
-        console.log('Player 2 not active, pre-buffering then pausing at 0');
-        safePlayerCall(player2Ref, 'playVideo');
-        setTimeout(() => {
-          safePlayerCall(player2Ref, 'pauseVideo');
-          safePlayerCall(player2Ref, 'seekTo', 0, true);
-        }, 1000);
+        // Seek to 0 and pause - ready to play when fade starts
+        console.log('Player 2 not active, pausing at 0');
+        safePlayerCall(player2Ref, 'pauseVideo');
+        safePlayerCall(player2Ref, 'seekTo', 0, true);
       }
     };
 
