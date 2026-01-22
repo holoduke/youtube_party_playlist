@@ -1202,18 +1202,26 @@ function App() {
     ? selectedPlaylist.videos
     : [];
 
-  // Update inactive player when playlist changes (e.g., video deleted)
+  // Update inactive player when playlist changes (e.g., video deleted or new playlist loaded)
   useEffect(() => {
     if (!playlistMode || autoPlayVideos.length === 0) return;
 
     // Find current active video index
     const activeVideo = crossfadeValue < 50 ? player1Video : player2Video;
     const activeIndex = autoPlayVideos.findIndex(v => v.id === activeVideo?.id);
-    if (activeIndex < 0) return;
 
-    // Calculate what the next video should be
-    const nextIndex = (activeIndex + 1) % autoPlayVideos.length;
-    const expectedNextVideo = autoPlayVideos[nextIndex];
+    // Calculate what the next video should be:
+    // - If active video is in playlist: next is the one after it
+    // - If active video is NOT in playlist (new playlist loaded): next is the first song
+    let expectedNextVideo;
+    if (activeIndex >= 0) {
+      // Active video is in playlist - next is the one after it
+      const nextIndex = (activeIndex + 1) % autoPlayVideos.length;
+      expectedNextVideo = autoPlayVideos[nextIndex];
+    } else {
+      // Active video not in playlist (new playlist) - next is the first song
+      expectedNextVideo = autoPlayVideos[0];
+    }
 
     // Check inactive player
     const inactiveVideo = crossfadeValue < 50 ? player2Video : player1Video;
@@ -1581,11 +1589,11 @@ function App() {
     }
   }, [handleSeekCommit, isSeeking, seekValue]);
 
-  // Next video is the one after the currently active video in the playlist
+  // Next video: if active video is in playlist, it's the one after it; otherwise it's the first song
   const activeVideoIndex = autoPlayVideos.findIndex(v => v.id === activeVideo?.id);
-  const nextVideo = activeVideoIndex >= 0 && activeVideoIndex + 1 < autoPlayVideos.length
-    ? autoPlayVideos[activeVideoIndex + 1]
-    : null;
+  const nextVideo = activeVideoIndex >= 0
+    ? (activeVideoIndex + 1 < autoPlayVideos.length ? autoPlayVideos[activeVideoIndex + 1] : null)
+    : (autoPlayVideos.length > 0 ? autoPlayVideos[0] : null);
 
   // Calculate remaining playlist time, count, and total time
   const playlistRemainingInfo = (() => {
