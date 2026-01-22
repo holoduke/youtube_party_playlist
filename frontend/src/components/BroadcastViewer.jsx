@@ -944,9 +944,16 @@ export default function BroadcastViewer() {
           style={showDebug ? {} : { opacity: Math.max(0.01, (100 - animatedCrossfade) / 100) }}
         >
           {showDebug && (
-            <div className="absolute top-2 left-2 z-50 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded">
-              P1 - Vol: {100 - animatedCrossfade}%
-            </div>
+            <>
+              <div className="absolute top-2 left-2 z-50 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded">
+                P1 - Vol: {100 - animatedCrossfade}%
+              </div>
+              {animatedCrossfade < 50 && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-green-500 text-white text-4xl font-bold px-8 py-4 rounded-xl shadow-2xl animate-pulse">
+                  ACTIVE
+                </div>
+              )}
+            </>
           )}
           {initialPlayer1VideoId && (
             <div className={showDebug
@@ -974,9 +981,16 @@ export default function BroadcastViewer() {
           style={showDebug ? {} : { opacity: Math.max(0.01, animatedCrossfade / 100) }}
         >
           {showDebug && (
-            <div className="absolute top-2 left-2 z-50 bg-cyan-500 text-black text-xs font-bold px-2 py-1 rounded">
-              P2 - Vol: {animatedCrossfade}%
-            </div>
+            <>
+              <div className="absolute top-2 left-2 z-50 bg-cyan-500 text-black text-xs font-bold px-2 py-1 rounded">
+                P2 - Vol: {animatedCrossfade}%
+              </div>
+              {animatedCrossfade >= 50 && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-green-500 text-white text-4xl font-bold px-8 py-4 rounded-xl shadow-2xl animate-pulse">
+                  ACTIVE
+                </div>
+              )}
+            </>
           )}
           {initialPlayer2VideoId && (
             <div className={showDebug
