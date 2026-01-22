@@ -437,6 +437,7 @@ export default function BroadcastViewer() {
       try {
         if (playerRef.current && typeof playerRef.current.setVolume === 'function') {
           console.log(`[YT API] Sync: Player ${playerNum}.setVolume(${newVolume})`);
+          if (newVolume === 100) playerRef.current.unMute?.();
           playerRef.current.setVolume(newVolume);
           lastVolumeRef.current = newVolume;
         }
@@ -500,6 +501,7 @@ export default function BroadcastViewer() {
           try {
             if (player1Ref.current?.setVolume) {
               console.log(`[YT API] Fade: Player 1.setVolume(${vol1})`);
+              if (vol1 === 100) player1Ref.current.unMute?.();
               player1Ref.current.setVolume(vol1);
               player1LastVolumeRef.current = vol1;
             }
@@ -509,6 +511,7 @@ export default function BroadcastViewer() {
           try {
             if (player2Ref.current?.setVolume) {
               console.log(`[YT API] Fade: Player 2.setVolume(${vol2})`);
+              if (vol2 === 100) player2Ref.current.unMute?.();
               player2Ref.current.setVolume(vol2);
               player2LastVolumeRef.current = vol2;
             }
