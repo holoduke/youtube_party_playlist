@@ -1645,10 +1645,17 @@ function App() {
       skipToNextRef.current?.();
     };
 
+    const handlePrevTrack = () => {
+      // Restart current song (seek to beginning)
+      const playerRef = crossfadeValue < 50 ? player1Ref : player2Ref;
+      playerRef.current?.seekTo?.(0, true);
+    };
+
     try {
       navigator.mediaSession.setActionHandler('play', handlePlay);
       navigator.mediaSession.setActionHandler('pause', handlePause);
       navigator.mediaSession.setActionHandler('nexttrack', handleNextTrack);
+      navigator.mediaSession.setActionHandler('previoustrack', handlePrevTrack);
     } catch {
       // Some handlers may not be supported
     }
@@ -1658,11 +1665,28 @@ function App() {
         navigator.mediaSession.setActionHandler('play', null);
         navigator.mediaSession.setActionHandler('pause', null);
         navigator.mediaSession.setActionHandler('nexttrack', null);
+        navigator.mediaSession.setActionHandler('previoustrack', null);
       } catch {
         // Ignore cleanup errors
       }
     };
   }, [crossfadeValue]);
+
+  // Update media session position state for seek bar support
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+    if (!activePlayerState.duration || isStopped) return;
+
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: activePlayerState.duration,
+        position: activePlayerState.currentTime,
+        playbackRate: 1,
+      });
+    } catch {
+      // Ignore position state errors
+    }
+  }, [activePlayerState.currentTime, activePlayerState.duration, isStopped]);
 
   // Calculate remaining playlist time, count, and total time
   const playlistRemainingInfo = (() => {
