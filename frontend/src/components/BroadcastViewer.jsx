@@ -748,10 +748,9 @@ export default function BroadcastViewer() {
     if (player1InitializedRef.current) {
       console.log('Player 1 onReady (already initialized)');
       player1LoadingRef.current = false; // Video is ready, allow time sync
-      // Skip any API calls during fades - the fade animation handles volume
-      if (lastFadeTriggerRef.current) {
-        console.log('Player 1 onReady: skipping API calls during fade');
-        return;
+      // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
+      if (!isMutedRef.current) {
+        safePlayerCall(player1Ref, 'unMute');
       }
       return;
     }
@@ -779,10 +778,9 @@ export default function BroadcastViewer() {
     if (player2InitializedRef.current) {
       console.log('Player 2 onReady (already initialized)');
       player2LoadingRef.current = false; // Video is ready, allow time sync
-      // Skip any API calls during fades - the fade animation handles volume
-      if (lastFadeTriggerRef.current) {
-        console.log('Player 2 onReady: skipping API calls during fade');
-        return;
+      // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
+      if (!isMutedRef.current) {
+        safePlayerCall(player2Ref, 'unMute');
       }
       return;
     }
