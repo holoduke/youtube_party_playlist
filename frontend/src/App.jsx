@@ -1202,6 +1202,35 @@ function App() {
     ? selectedPlaylist.videos
     : [];
 
+  // Update inactive player when playlist changes (e.g., video deleted)
+  useEffect(() => {
+    if (!playlistMode || autoPlayVideos.length === 0) return;
+
+    // Find current active video index
+    const activeVideo = crossfadeValue < 50 ? player1Video : player2Video;
+    const activeIndex = autoPlayVideos.findIndex(v => v.id === activeVideo?.id);
+    if (activeIndex < 0) return;
+
+    // Calculate what the next video should be
+    const nextIndex = (activeIndex + 1) % autoPlayVideos.length;
+    const expectedNextVideo = autoPlayVideos[nextIndex];
+
+    // Check inactive player
+    const inactiveVideo = crossfadeValue < 50 ? player2Video : player1Video;
+
+    // If inactive player has a different video than expected next, update it
+    if (expectedNextVideo && inactiveVideo?.id !== expectedNextVideo.id) {
+      console.log(`[Playlist Update] Updating inactive player with "${expectedNextVideo.title}"`);
+      if (crossfadeValue < 50) {
+        setPlayer2Video(expectedNextVideo);
+        setRestoredVideoIds(prev => ({ ...prev, player2: expectedNextVideo.youtube_id }));
+      } else {
+        setPlayer1Video(expectedNextVideo);
+        setRestoredVideoIds(prev => ({ ...prev, player1: expectedNextVideo.youtube_id }));
+      }
+    }
+  }, [autoPlayVideos, playlistMode]);
+
   // Manual crossfade between the two players
   const skipToNextWithFade = useCallback(() => {
     // If already fading, queue this request
