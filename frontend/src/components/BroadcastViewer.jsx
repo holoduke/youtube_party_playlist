@@ -72,6 +72,9 @@ export default function BroadcastViewer() {
   const lastSeekTimeRef = useRef({ 1: 0, 2: 0 });
   // Track ended state for polling closure
   const isEndedRef = useRef(false);
+  // Track commanded playback state to avoid duplicate API calls
+  const player1CommandedPlayingRef = useRef(false);
+  const player2CommandedPlayingRef = useRef(false);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -196,16 +199,18 @@ export default function BroadcastViewer() {
               const state1 = player1Ref.current.getPlayerState?.();
               // State 1 = playing, 3 = buffering - these are OK
               // -1 = unstarted, 0 = ended, 2 = paused, 5 = cued
-              if (state1 !== 1 && state1 !== 3) {
+              if (state1 !== 1 && state1 !== 3 && !player1CommandedPlayingRef.current) {
                 console.log(`[YT API] Poll sync: Player 1.playVideo() (state was ${state1})`);
                 player1Ref.current.playVideo();
+                player1CommandedPlayingRef.current = true;
               }
             }
             if (serverPlayer2Playing && player2Ref.current && !player2FadedOut && player2InitializedRef.current) {
               const state2 = player2Ref.current.getPlayerState?.();
-              if (state2 !== 1 && state2 !== 3) {
+              if (state2 !== 1 && state2 !== 3 && !player2CommandedPlayingRef.current) {
                 console.log(`[YT API] Poll sync: Player 2.playVideo() (state was ${state2})`);
                 player2Ref.current.playVideo();
+                player2CommandedPlayingRef.current = true;
               }
             }
           } catch (e) {
@@ -223,10 +228,12 @@ export default function BroadcastViewer() {
           // end_value = 100 means fading TO Player 2, end_value = 0 means fading TO Player 1
           const incomingPlayerRef = serverFadeTrigger.end_value === 100 ? player2Ref : player1Ref;
           const incomingPlayerNum = serverFadeTrigger.end_value === 100 ? 2 : 1;
+          const incomingCommandedRef = incomingPlayerNum === 1 ? player1CommandedPlayingRef : player2CommandedPlayingRef;
           try {
-            if (incomingPlayerRef.current) {
+            if (incomingPlayerRef.current && !incomingCommandedRef.current) {
               console.log(`[YT API] Fade start: Player ${incomingPlayerNum}.playVideo()`);
               incomingPlayerRef.current.playVideo();
+              incomingCommandedRef.current = true;
             }
           } catch { /* ignore */ }
         } else if (!serverFadeTrigger && lastFadeTriggerRef.current) {
@@ -277,10 +284,16 @@ export default function BroadcastViewer() {
 
         const safePause = (playerRef) => {
           const playerNum = playerRef === player1Ref ? 1 : 2;
+          const commandedRef = playerNum === 1 ? player1CommandedPlayingRef : player2CommandedPlayingRef;
+          if (commandedRef.current === false) {
+            console.log(`[YT API] Time sync: Player ${playerNum}.pauseVideo() - SKIPPED (already commanded)`);
+            return;
+          }
           try {
             if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
               console.log(`[YT API] Time sync: Player ${playerNum}.pauseVideo()`);
               playerRef.current.pauseVideo();
+              commandedRef.current = false;
             }
           } catch {
             // Player iframe was destroyed, ignore
@@ -575,9 +588,26 @@ export default function BroadcastViewer() {
     };
   }, [fadeTrigger]);
 
-  // Logged wrapper for all YouTube API calls - helps debug excessive calls
+  // Logged wrapper for all YouTube API calls - tracks commanded state to avoid duplicates
   const safePlayerCall = (playerRef, method, ...args) => {
     const playerNum = playerRef === player1Ref ? 1 : 2;
+    const commandedRef = playerNum === 1 ? player1CommandedPlayingRef : player2CommandedPlayingRef;
+
+    // Skip duplicate play/pause commands
+    if (method === 'playVideo') {
+      if (commandedRef.current === true) {
+        console.log(`[YT API] Player ${playerNum}.playVideo() - SKIPPED (already commanded)`);
+        return;
+      }
+      commandedRef.current = true;
+    } else if (method === 'pauseVideo') {
+      if (commandedRef.current === false) {
+        console.log(`[YT API] Player ${playerNum}.pauseVideo() - SKIPPED (already commanded)`);
+        return;
+      }
+      commandedRef.current = false;
+    }
+
     try {
       if (playerRef.current && typeof playerRef.current[method] === 'function') {
         console.log(`[YT API] Player ${playerNum}.${method}(${args.join(', ')})`);
@@ -598,6 +628,7 @@ export default function BroadcastViewer() {
 
     player1LoadedVideoIdRef.current = player1Video.youtube_id;
     player1LoadingRef.current = true;
+    player1CommandedPlayingRef.current = false; // Reset - new video is cued, not playing
     try {
       console.log(`[YT API] Player 1.cueVideoById(${player1Video.youtube_id})`);
       player1Ref.current.cueVideoById(player1Video.youtube_id);
@@ -629,6 +660,7 @@ export default function BroadcastViewer() {
 
     player2LoadedVideoIdRef.current = player2Video.youtube_id;
     player2LoadingRef.current = true;
+    player2CommandedPlayingRef.current = false; // Reset - new video is cued, not playing
     try {
       console.log(`[YT API] Player 2.cueVideoById(${player2Video.youtube_id})`);
       player2Ref.current.cueVideoById(player2Video.youtube_id);
