@@ -650,82 +650,8 @@ export default function BroadcastViewer() {
     }
   }, [player2Video?.youtube_id]);
 
-  // Playback control - each player controlled independently based on DJ app state
-  // Skip during fades and for faded-out players to avoid triggering player reinitialization
-  useEffect(() => {
-    // Don't control playback until we've received state from server
-    if (!hasReceivedState) return;
-    // Skip during fades to avoid triggering onReady reinitializations
-    if (fadeTrigger) return;
-    // Skip if Player 1 is fully faded out (no need to control it)
-    if (crossfadeValue >= 95) return;
-
-    const controlPlayer = () => {
-      if (!player1Ref.current || typeof player1Ref.current.getPlayerState !== 'function') {
-        return;
-      }
-
-      try {
-        const state = player1Ref.current.getPlayerState();
-        if (player1Playing) {
-          // Only call playVideo if not already playing (state 1) or buffering (state 3)
-          if (state !== 1 && state !== 3) {
-            console.log(`[YT API] Playback ctrl: Player 1.playVideo() (state was ${state})`);
-            player1Ref.current.playVideo();
-          }
-        } else {
-          // Only pause if actually playing
-          if (state === 1 || state === 3) {
-            console.log(`[YT API] Playback ctrl: Player 1.pauseVideo() (state was ${state})`);
-            player1Ref.current.pauseVideo();
-          }
-        }
-      } catch {
-        player1Ref.current = null;
-      }
-    };
-
-    controlPlayer();
-    const interval = setInterval(controlPlayer, 1000);
-    return () => clearInterval(interval);
-  }, [player1Playing, player1Video, hasReceivedState, fadeTrigger, crossfadeValue]);
-
-  useEffect(() => {
-    if (!hasReceivedState) return;
-    // Skip during fades to avoid triggering onReady reinitializations
-    if (fadeTrigger) return;
-    // Skip if Player 2 is fully faded out (no need to control it)
-    if (crossfadeValue <= 5) return;
-
-    const controlPlayer = () => {
-      if (!player2Ref.current || typeof player2Ref.current.getPlayerState !== 'function') {
-        return;
-      }
-
-      try {
-        const state = player2Ref.current.getPlayerState();
-        if (player2Playing) {
-          // Only call playVideo if not already playing (state 1) or buffering (state 3)
-          if (state !== 1 && state !== 3) {
-            console.log(`[YT API] Playback ctrl: Player 2.playVideo() (state was ${state})`);
-            player2Ref.current.playVideo();
-          }
-        } else {
-          // Only pause if actually playing
-          if (state === 1 || state === 3) {
-            console.log(`[YT API] Playback ctrl: Player 2.pauseVideo() (state was ${state})`);
-            player2Ref.current.pauseVideo();
-          }
-        }
-      } catch {
-        player2Ref.current = null;
-      }
-    };
-
-    controlPlayer();
-    const interval = setInterval(controlPlayer, 1000);
-    return () => clearInterval(interval);
-  }, [player2Playing, player2Video, hasReceivedState, fadeTrigger, crossfadeValue]);
+  // Playback control removed - handled by poll sync and fade trigger
+  // The interval-based control was causing too many API calls and potential spinner issues
 
   const opts = {
     width: '100%',
