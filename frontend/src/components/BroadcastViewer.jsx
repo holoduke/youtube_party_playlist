@@ -449,9 +449,9 @@ export default function BroadcastViewer() {
     // Only sync directly when there's no active fade animation
     if (!fadeTrigger) {
       setAnimatedCrossfade(crossfadeValue);
-      // Set volumes only if changed
-      const vol1 = isMutedRef.current ? 0 : 100 - crossfadeValue;
-      const vol2 = isMutedRef.current ? 0 : crossfadeValue;
+      // Simple volume switch - active player gets 100, inactive gets 0
+      const vol1 = isMutedRef.current ? 0 : (crossfadeValue < 50 ? 100 : 0);
+      const vol2 = isMutedRef.current ? 0 : (crossfadeValue >= 50 ? 100 : 0);
       setPlayerVolume(player1Ref, player1LastVolumeRef, vol1);
       setPlayerVolume(player2Ref, player2LastVolumeRef, vol2);
     }
@@ -490,21 +490,13 @@ export default function BroadcastViewer() {
       // Update animated crossfade (drives opacity)
       setAnimatedCrossfade(roundedValue);
 
-      // Skip volume updates entirely when muted (volumes are already 0)
-      if (isMutedRef.current) {
-        // Continue animation but don't touch YouTube API
-      } else {
-        // Update volumes only if changed by at least 5 (reduces API calls from ~100 to ~20)
-        const vol1 = 100 - roundedValue;
-        const vol2 = roundedValue;
+      // Simple volume switch at midpoint - no gradual fading
+      // This reduces YouTube API calls and potential spinner issues
+      if (!isMutedRef.current) {
+        const vol1 = roundedValue < 50 ? 100 : 0;
+        const vol2 = roundedValue >= 50 ? 100 : 0;
 
-        // Only update if changed by 5+ or reaching boundaries (0 or 100) for the first time
-        const shouldUpdateVol1 = player1LastVolumeRef.current !== vol1 &&
-          (Math.abs(player1LastVolumeRef.current - vol1) >= 5 || vol1 === 0 || vol1 === 100);
-        const shouldUpdateVol2 = player2LastVolumeRef.current !== vol2 &&
-          (Math.abs(player2LastVolumeRef.current - vol2) >= 5 || vol2 === 0 || vol2 === 100);
-
-        if (shouldUpdateVol1) {
+        if (player1LastVolumeRef.current !== vol1) {
           try {
             if (player1Ref.current?.setVolume) {
               console.log(`[YT API] Fade: Player 1.setVolume(${vol1})`);
@@ -513,7 +505,7 @@ export default function BroadcastViewer() {
             }
           } catch { /* ignore */ }
         }
-        if (shouldUpdateVol2) {
+        if (player2LastVolumeRef.current !== vol2) {
           try {
             if (player2Ref.current?.setVolume) {
               console.log(`[YT API] Fade: Player 2.setVolume(${vol2})`);
@@ -844,9 +836,9 @@ export default function BroadcastViewer() {
   const handleUnmute = () => {
     console.log('User clicked unmute, crossfadeRef:', crossfadeRef.current, 'animatedCrossfade:', animatedCrossfade);
     setIsMuted(false);
-    // Use animatedCrossfade for volume to match the visual state
-    const vol1 = 100 - animatedCrossfade;
-    const vol2 = animatedCrossfade;
+    // Simple volume switch - active player gets 100, inactive gets 0
+    const vol1 = animatedCrossfade < 50 ? 100 : 0;
+    const vol2 = animatedCrossfade >= 50 ? 100 : 0;
     console.log('Setting volumes: vol1=', vol1, 'vol2=', vol2);
     safePlayerCall(player1Ref, 'unMute');
     safePlayerCall(player1Ref, 'setVolume', vol1);
