@@ -68,8 +68,6 @@ export default function BroadcastViewer() {
   // Track if players have been initialized (to skip API calls before ready)
   const player1InitializedRef = useRef(false);
   const player2InitializedRef = useRef(false);
-  // Track when fades end to prevent video loads immediately after
-  const lastFadeEndTimeRef = useRef(0);
   // Track last seek time per player to add cooldown between seeks
   const lastSeekTimeRef = useRef({ 1: 0, 2: 0 });
   // Track ended state for polling closure
@@ -518,8 +516,6 @@ export default function BroadcastViewer() {
       } else {
         console.log('Fade animation complete');
         fadeAnimationRef.current = null;
-        // Record fade end time to prevent immediate video loads
-        lastFadeEndTimeRef.current = Date.now();
       }
     };
 
@@ -547,103 +543,62 @@ export default function BroadcastViewer() {
   };
 
   // Load video via API when video changes (no re-render needed)
-  // Skip during fades, delay after fades to avoid spinner
+  // Load immediately - don't skip during fades (skipping causes wrong video to be visible)
   useEffect(() => {
-    // Don't load videos during active fades
-    if (fadeTrigger) {
-      console.log('Player 1: skipping video load during fade');
-      return;
-    }
     if (!player1Ref.current || !player1Video?.youtube_id) return;
 
     const loadedVideoId = player1LoadedVideoIdRef.current;
     if (loadedVideoId === player1Video.youtube_id) return;
 
-    // Delay video load if fade just ended
-    const timeSinceFadeEnd = Date.now() - lastFadeEndTimeRef.current;
-    const delay = timeSinceFadeEnd < 2000 ? 2000 - timeSinceFadeEnd : 0;
-
-    if (delay > 0) {
-      console.log(`Player 1: delaying video load by ${delay}ms after fade`);
-    }
-
-    const timeoutId = setTimeout(() => {
-      // Re-check conditions after delay
-      if (player1LoadedVideoIdRef.current === player1Video.youtube_id) return;
-      if (!player1Ref.current) return;
-
-      player1LoadedVideoIdRef.current = player1Video.youtube_id;
-      player1LoadingRef.current = true;
-      try {
-        console.log(`[YT API] Player 1.cueVideoById(${player1Video.youtube_id})`);
-        player1Ref.current.cueVideoById(player1Video.youtube_id);
-        setTimeout(() => {
-          player1LoadingRef.current = false;
-          // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
-          if (!isMutedRef.current) {
-            safePlayerCall(player1Ref, 'unMute');
-          }
-          if (player1PlayingRef.current) {
-            safePlayerCall(player1Ref, 'playVideo');
-          }
-        }, 500);
-      } catch (e) {
-        console.log('Player 1 loadVideo error:', e);
+    player1LoadedVideoIdRef.current = player1Video.youtube_id;
+    player1LoadingRef.current = true;
+    try {
+      console.log(`[YT API] Player 1.cueVideoById(${player1Video.youtube_id})`);
+      player1Ref.current.cueVideoById(player1Video.youtube_id);
+      setTimeout(() => {
         player1LoadingRef.current = false;
-      }
-    }, delay);
-
-    return () => clearTimeout(timeoutId);
-  }, [player1Video?.youtube_id, fadeTrigger]);
-
-  // Skip during fades, delay after fades to avoid spinner
-  useEffect(() => {
-    // Don't load videos during active fades
-    if (fadeTrigger) {
-      console.log('Player 2: skipping video load during fade');
-      return;
+        // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
+        if (!isMutedRef.current) {
+          safePlayerCall(player1Ref, 'unMute');
+        }
+        if (player1PlayingRef.current) {
+          safePlayerCall(player1Ref, 'playVideo');
+        }
+      }, 500);
+    } catch (e) {
+      console.log('Player 1 loadVideo error:', e);
+      player1LoadingRef.current = false;
     }
+  }, [player1Video?.youtube_id]);
+
+  // Load video via API when video changes (no re-render needed)
+  // Load immediately - don't skip during fades (skipping causes wrong video to be visible)
+  useEffect(() => {
     if (!player2Ref.current || !player2Video?.youtube_id) return;
 
     const loadedVideoId = player2LoadedVideoIdRef.current;
     if (loadedVideoId === player2Video.youtube_id) return;
 
-    // Delay video load if fade just ended
-    const timeSinceFadeEnd = Date.now() - lastFadeEndTimeRef.current;
-    const delay = timeSinceFadeEnd < 2000 ? 2000 - timeSinceFadeEnd : 0;
-
-    if (delay > 0) {
-      console.log(`Player 2: delaying video load by ${delay}ms after fade`);
-    }
-
-    const timeoutId = setTimeout(() => {
-      // Re-check conditions after delay
-      if (player2LoadedVideoIdRef.current === player2Video.youtube_id) return;
-      if (!player2Ref.current) return;
-
-      player2LoadedVideoIdRef.current = player2Video.youtube_id;
-      player2LoadingRef.current = true;
-      try {
-        console.log(`[YT API] Player 2.cueVideoById(${player2Video.youtube_id})`);
-        player2Ref.current.cueVideoById(player2Video.youtube_id);
-        setTimeout(() => {
-          player2LoadingRef.current = false;
-          // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
-          if (!isMutedRef.current) {
-            safePlayerCall(player2Ref, 'unMute');
-          }
-          if (player2PlayingRef.current) {
-            safePlayerCall(player2Ref, 'playVideo');
-          }
-        }, 500);
-      } catch (e) {
-        console.log('Player 2 loadVideo error:', e);
+    player2LoadedVideoIdRef.current = player2Video.youtube_id;
+    player2LoadingRef.current = true;
+    try {
+      console.log(`[YT API] Player 2.cueVideoById(${player2Video.youtube_id})`);
+      player2Ref.current.cueVideoById(player2Video.youtube_id);
+      setTimeout(() => {
         player2LoadingRef.current = false;
-      }
-    }, delay);
-
-    return () => clearTimeout(timeoutId);
-  }, [player2Video?.youtube_id, fadeTrigger]);
+        // Re-apply unmute if user has unmuted (YouTube resets mute on video load)
+        if (!isMutedRef.current) {
+          safePlayerCall(player2Ref, 'unMute');
+        }
+        if (player2PlayingRef.current) {
+          safePlayerCall(player2Ref, 'playVideo');
+        }
+      }, 500);
+    } catch (e) {
+      console.log('Player 2 loadVideo error:', e);
+      player2LoadingRef.current = false;
+    }
+  }, [player2Video?.youtube_id]);
 
   // Playback control - each player controlled independently based on DJ app state
   // Skip during fades and for faded-out players to avoid triggering player reinitialization
