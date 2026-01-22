@@ -544,6 +544,7 @@ export default function BroadcastViewer() {
 
   // Load video via API when video changes (no re-render needed)
   // Load immediately - don't skip during fades (skipping causes wrong video to be visible)
+  // Always start playback after cue so video buffers while faded out (volume is 0, so silent)
   useEffect(() => {
     if (!player1Ref.current || !player1Video?.youtube_id) return;
 
@@ -561,9 +562,9 @@ export default function BroadcastViewer() {
         if (!isMutedRef.current) {
           safePlayerCall(player1Ref, 'unMute');
         }
-        if (player1PlayingRef.current) {
-          safePlayerCall(player1Ref, 'playVideo');
-        }
+        // Always start playback so video buffers (volume controls audio, not playback state)
+        // This prevents spinner when fade brings player into view
+        safePlayerCall(player1Ref, 'playVideo');
       }, 500);
     } catch (e) {
       console.log('Player 1 loadVideo error:', e);
@@ -573,6 +574,7 @@ export default function BroadcastViewer() {
 
   // Load video via API when video changes (no re-render needed)
   // Load immediately - don't skip during fades (skipping causes wrong video to be visible)
+  // Always start playback after cue so video buffers while faded out (volume is 0, so silent)
   useEffect(() => {
     if (!player2Ref.current || !player2Video?.youtube_id) return;
 
@@ -590,9 +592,9 @@ export default function BroadcastViewer() {
         if (!isMutedRef.current) {
           safePlayerCall(player2Ref, 'unMute');
         }
-        if (player2PlayingRef.current) {
-          safePlayerCall(player2Ref, 'playVideo');
-        }
+        // Always start playback so video buffers (volume controls audio, not playback state)
+        // This prevents spinner when fade brings player into view
+        safePlayerCall(player2Ref, 'playVideo');
       }, 500);
     } catch (e) {
       console.log('Player 2 loadVideo error:', e);
