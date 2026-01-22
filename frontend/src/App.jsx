@@ -1288,11 +1288,11 @@ function App() {
       player2Ref.current.play();
     }
 
-    // Fade settings: 8 seconds total, update every 200ms = 40 steps
+    // Fade settings: 4 seconds total, update every 200ms = 20 steps
     const startValue = fadingToPlayer2 ? 0 : 100;
     const endValue = fadingToPlayer2 ? 100 : 0;
-    const fadeDuration = 8000; // 8 seconds
-    const totalSteps = 40;
+    const fadeDuration = 4000; // 4 seconds
+    const totalSteps = 20;
     const stepSize = (endValue - startValue) / totalSteps;
     let step = 0;
 
@@ -1482,8 +1482,8 @@ function App() {
 
       const startValue = fadingToPlayer2 ? 0 : 100;
       const endValue = fadingToPlayer2 ? 100 : 0;
-      const fadeStep = fadingToPlayer2 ? 6.25 : -6.25; // 100/16 steps over ~8 seconds
-      const fadeDuration = 8000; // 8 seconds
+      const fadeStep = fadingToPlayer2 ? 12.5 : -12.5; // 100/8 steps over ~4 seconds
+      const fadeDuration = 4000; // 4 seconds
 
       // Set fade trigger for broadcast viewers - they will animate locally
       fadeTriggeredRef.current = {
@@ -2467,8 +2467,8 @@ function App() {
                       setTimeout(() => {
                         skipToNextWithFade();
                       }, 500);
-                      // Re-enable playlist sync after fade completes (fade is 8 seconds + buffer)
-                      setTimeout(() => { manualVideoLoadRef.current = false; }, 10000);
+                      // Re-enable playlist sync after fade completes (fade is 4 seconds + buffer)
+                      setTimeout(() => { manualVideoLoadRef.current = false; }, 6000);
                     }
                     // Set playlist mode
                     setActivePlaylist(viewingPlaylist);
